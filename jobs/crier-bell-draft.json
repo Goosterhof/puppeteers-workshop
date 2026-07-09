@@ -1,0 +1,13 @@
+{
+    "model_type": "ti2v_2_2_fastwan",
+    "prompt": "A vintage storybook illustration of a brass automaton town crier in a navy cape and tricorn hat, standing on a plain cream background. The golden bell mounted inside the arched opening in his chest swings vigorously side to side, ringing out a proclamation. His torso and head rock gently with each toll of the bell. His raised right hand keeps holding the parchment scroll perfectly steady. Static camera, no camera movement, no zoom. The flat cream background stays perfectly still, uniform and empty.",
+    "negative_prompt": "camera pan, zoom, background texture, background movement, extra limbs, text, watermark",
+    "image_prompt_type": "S",
+    "image_start": "/home/goosterhof/code/video-lab/footage/crier-bell-start-704x1280.png",
+    "resolution": "704x1280",
+    "video_length": 61,
+    "num_inference_steps": 3,
+    "guidance_scale": 1,
+    "flow_shift": 3,
+    "seed": 42
+}

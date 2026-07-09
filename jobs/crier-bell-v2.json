@@ -1,0 +1,28 @@
+[
+    {
+        "model_type": "ti2v_2_2_fastwan",
+        "prompt": "Subtle looping animation of a static storybook illustration. A brass automaton town crier stands perfectly still on a plain cream background. The only movement: the small golden bell mounted inside the arched alcove in his chest swings gently left and right on its mount, staying inside the alcove, and his glowing eyes flicker warmly. Every detail of the illustration stays exactly identical: the gear emblem on his tricorn hat, the crest on his cape, the parchment scroll with two wax seals held perfectly still in his raised hand. Static camera, no zoom, minimal motion, the flat cream background never changes.",
+        "negative_prompt": "camera pan, zoom, style change, redrawing, morphing, color shift, extra limbs, text, watermark, background texture",
+        "image_prompt_type": "S",
+        "image_start": "/home/goosterhof/code/video-lab/footage/crier-bell-start-704x1280.png",
+        "resolution": "704x1280",
+        "video_length": 41,
+        "num_inference_steps": 6,
+        "guidance_scale": 1,
+        "flow_shift": 3,
+        "seed": 42
+    },
+    {
+        "model_type": "ti2v_2_2_fastwan",
+        "prompt": "Cinemagraph, almost still. A hand-drawn brass automaton town crier illustration on a plain cream background, rendered in muted watercolor tones. He gently rocks a tiny amount as the golden bell in his chest alcove sways softly. The parchment scroll in his raised hand stays completely still. The illustration keeps its exact original linework, colors and details at all times. Locked-off camera, tiny motion amplitude, flat uniform cream background.",
+        "negative_prompt": "camera pan, zoom, style change, redrawing, morphing, color shift, extra limbs, text, watermark, background texture",
+        "image_prompt_type": "S",
+        "image_start": "/home/goosterhof/code/video-lab/footage/crier-bell-start-704x1280.png",
+        "resolution": "704x1280",
+        "video_length": 41,
+        "num_inference_steps": 6,
+        "guidance_scale": 1,
+        "flow_shift": 3,
+        "seed": 777
+    }
+]

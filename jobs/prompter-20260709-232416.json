@@ -1,0 +1,17 @@
+[
+ {
+  "model_type": "i2v_2_2_Enhanced_Lightning_v2",
+  "image_prompt_type": "S",
+  "num_inference_steps": 4,
+  "guidance_phases": 2,
+  "switch_threshold": 900,
+  "guidance_scale": 1,
+  "guidance2_scale": 1,
+  "flow_shift": 5,
+  "prompt": "The man with tousled brown hair, thick dark-and-gray beard, and black T-shirt bearing a faint logo stays exactly as drawn. Flames spiral intensely from his shoulders, curling like liquid fire to consume the chair\u2019s harness straps. Tousled brown hair, thick dark-and-gray beard, black T-shirt with faint logo, black gaming chair\u2019s harness straps, ceiling\u2019s white paint seams, and wooden door frame stay perfectly still. Locked-off static camera, no zoom. The room\u2019s ceiling with visible seams, wooden door frame, and purple ambient lighting stay perfectly still.",
+  "image_start": "/home/goosterhof/code/video-lab/footage/IMG_6720-keyframe.png",
+  "resolution": "704x1280",
+  "video_length": 41,
+  "seed": 7
+ }
+]

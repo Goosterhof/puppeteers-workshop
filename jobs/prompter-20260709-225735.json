@@ -1,0 +1,17 @@
+[
+ {
+  "model_type": "i2v_2_2_Enhanced_Lightning_v2",
+  "image_prompt_type": "S",
+  "num_inference_steps": 4,
+  "guidance_phases": 2,
+  "switch_threshold": 900,
+  "guidance_scale": 1,
+  "guidance2_scale": 1,
+  "flow_shift": 5,
+  "prompt": "A person with glowing, wide-set eyes and a full, open mouth smiles broadly while sitting still. The subject\u2019s face beams with love as they gently stroke a pet\u2019s fur. Glowing, wide-set eyes; full, open mouth; dimpled cheeks stay exactly as drawn. Locked-off static camera, no zoom. The flat uniform background stays perfectly still.",
+  "image_start": "/home/goosterhof/code/video-lab/footage/IMG_6720-keyframe.png",
+  "resolution": "480x832",
+  "video_length": 41,
+  "seed": 7
+ }
+]

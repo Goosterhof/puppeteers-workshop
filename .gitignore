@@ -1,0 +1,15 @@
+# The heavy machinery — upstream clones with venvs + ~120 GB of model weights.
+# They are installed onto the workshop floor, never tracked. runbook.md
+# documents how to bolt them down again from scratch.
+/Wan2GP/
+/ComfyUI/
+
+# The footage archive — personal media (the puppeteer's own face among it).
+# Never leaves the building.
+/footage/
+
+# Ephemera of running the machines.
+*.log
+/jobs/logs/
+/outputs/
+__pycache__/
