@@ -1,0 +1,47 @@
+[
+ {
+  "model_type": "i2v_2_2_Enhanced_Lightning_v2",
+  "prompt": "A vintage storybook illustration of a brass automaton town crier, standing on a plain flat cream background. Subtle animation: the small golden bell mounted inside the arched alcove in his chest swings once, slowly and heavily, one deep solemn toll, staying inside the alcove. His torso bows very slightly under the weight of the swing, then settles still. His raised hand keeps the parchment scroll perfectly still. All illustration details stay exactly as drawn: the gear emblem on the tricorn hat, the crest on the cape, the two wax seals on the scroll. Locked-off static camera, no zoom, minimal motion, flat uniform cream background with no texture.",
+  "image_prompt_type": "S",
+  "image_start": "/home/goosterhof/code/video-lab/footage/crier-bell-start-704x1280.png",
+  "resolution": "704x1280",
+  "video_length": 41,
+  "num_inference_steps": 4,
+  "guidance_phases": 2,
+  "switch_threshold": 900,
+  "guidance_scale": 1,
+  "guidance2_scale": 1,
+  "flow_shift": 5,
+  "seed": 7
+ },
+ {
+  "model_type": "i2v_2_2_Enhanced_Lightning_v2",
+  "prompt": "A vintage storybook illustration of a brass automaton town crier, standing on a plain flat cream background. Subtle animation: the small golden bell mounted inside the arched alcove in his chest swings once, slowly and heavily, one deep solemn toll, staying inside the alcove. His torso bows very slightly under the weight of the swing, then settles still. His raised hand keeps the parchment scroll perfectly still. All illustration details stay exactly as drawn: the gear emblem on the tricorn hat, the crest on the cape, the two wax seals on the scroll. Locked-off static camera, no zoom, minimal motion, flat uniform cream background with no texture.",
+  "image_prompt_type": "S",
+  "image_start": "/home/goosterhof/code/video-lab/footage/crier-bell-start-704x1280.png",
+  "resolution": "704x1280",
+  "video_length": 41,
+  "num_inference_steps": 4,
+  "guidance_phases": 2,
+  "switch_threshold": 900,
+  "guidance_scale": 1,
+  "guidance2_scale": 1,
+  "flow_shift": 5,
+  "seed": 42
+ },
+ {
+  "model_type": "i2v_2_2_Enhanced_Lightning_v2",
+  "prompt": "A vintage storybook illustration of a brass automaton town crier, standing on a plain flat cream background. Subtle animation: the small golden bell mounted inside the arched alcove in his chest swings once, slowly and heavily, one deep solemn toll, staying inside the alcove. His torso bows very slightly under the weight of the swing, then settles still. His raised hand keeps the parchment scroll perfectly still. All illustration details stay exactly as drawn: the gear emblem on the tricorn hat, the crest on the cape, the two wax seals on the scroll. Locked-off static camera, no zoom, minimal motion, flat uniform cream background with no texture.",
+  "image_prompt_type": "S",
+  "image_start": "/home/goosterhof/code/video-lab/footage/crier-bell-start-704x1280.png",
+  "resolution": "704x1280",
+  "video_length": 41,
+  "num_inference_steps": 4,
+  "guidance_phases": 2,
+  "switch_threshold": 900,
+  "guidance_scale": 1,
+  "guidance2_scale": 1,
+  "flow_shift": 5,
+  "seed": 1234
+ }
+]
