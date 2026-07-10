@@ -38,6 +38,7 @@ video-lab/
 | `flux-2-klein-9b-BF16.gguf` | `ComfyUI/models/diffusion_models/` | `unsloth/FLUX.2-klein-9B-GGUF` | ungated; full precision, ~18 GB — fits the 5090 |
 | `qwen_3_8b_fp8mixed.safetensors` | `ComfyUI/models/text_encoders/` | `Comfy-Org/flux2-klein-9B` | ungated |
 | `flux2-vae.safetensors` | `ComfyUI/models/vae/` | `Comfy-Org/flux2-dev` | ungated |
+| `hunyuan_3d_v2.1.safetensors` | `ComfyUI/models/checkpoints/` | `Comfy-Org/hunyuan3D_2.1_repackaged` | ungated; 7.4 GB all-in-one (DiT + CLIP-vision + VAE). **The latent kiln** — image→GLB mesh via ComfyUI-native nodes (`ImageOnlyCheckpointLoader → CLIPVisionEncode → Hunyuan3Dv2Conditioning → KSampler 30 steps cfg 5 → VAEDecodeHunyuan3D → VoxelToMesh "surface net" → SaveGLB`); ~30 s per mesh on the 5090. Shape only — no texture stage in core ComfyUI; planar-project the source painting in the consumer (edge-pad the keyed texture first, seeding from interior colors so the outline ring never smears). First firing: the Menagerie's Carousel Figure (2026-07-10) |
 | SCAIL-2 / OmniVoice / LTX2 | Wan2GP manages | auto-download on first use | pick in the Wan2GP UI |
 
 **Gated upgrade path:** the official `black-forest-labs/FLUX.2-klein-9b-fp8` safetensors
