@@ -148,6 +148,15 @@ pipeline (stdlib Python, `prompter-box/`, no venv):
   Every painting carries **"Send to the stage →"**: copies it into `footage/`,
   jumps to the Stage with it preselected, and snaps the resolution to the
   nearest Wan aspect — paint the character, then animate it, one click apart.
+- **Foley Booth** (added 2026-07-11) — headless MMAudio: a cue alone is
+  text-to-audio (8 s sweet spot, trim the sting after); pick a reel from
+  footage/ or the Stage's fresh takes and the sync module scores the frames
+  (V2A, duration snaps to the clip). Every finished Stage take carries
+  **"Score it in the foley booth →"** — animate, then sound, one click apart.
+  Per-cue output dirs dodge the prompt-slug overwrite trap; the booth injects
+  `LD_LIBRARY_PATH` for torchcodec's FFmpeg-shared substrate itself. Guarded
+  at 8 GB via the same fail-closed stagehands; refused while the Stage or the
+  full Wan UI performs.
 - **VRAM choreography** — cue lights show what's loaded; every generation cue
   auto-evicts loaded LLMs first; "Clear the boards" evicts by hand. Stage cues
   are refused while the full Wan2GP UI holds :7860 (one GPU, one performance).

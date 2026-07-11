@@ -32,7 +32,7 @@ bump the lab's ref (submodule discipline).
 
 | Instrument | Location | What it does |
 |---|---|---|
-| **The Prompter's Box** | `prompter-box/` (`./start-prompter.sh` → :7900) | The unified console — forge cues, paint in the Face Shop (headless Klein t2i), animate on the Stage (headless `wgp.py --process` i2v), cast paintings into footage, all with fail-closed VRAM choreography |
+| **The Prompter's Box** | `prompter-box/` (`./start-prompter.sh` → :7900) | The unified console — forge cues, paint in the Face Shop (headless Klein t2i), animate on the Stage (headless `wgp.py --process` i2v), score in the Foley Booth (headless MMAudio t2a/v2a — a Stage take is one click from its soundtrack), cast paintings into footage, all with fail-closed VRAM choreography |
 | **The Promptsmith** | `prompt-forge/promptsmith.py` | Generation-prompt forge on local Ollama models — `qwen3:14b` text, `qwen3-vl:8b` with `--image` (reads the stillness inventory off the actual pixels) |
 | **The Framewright** | `crop-tool/croptool.py` | Exact-resolution cropper with Wan presets — resolution discipline is the whole game in motion transfer |
 

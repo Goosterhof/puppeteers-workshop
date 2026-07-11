@@ -11,6 +11,7 @@ Stdlib only, same philosophy as the Promptsmith: no venv, no dependencies.
 
 import json
 import mimetypes
+import os
 import shutil
 import socket
 import subprocess
@@ -33,6 +34,10 @@ WAN_DIR = BASE / "Wan2GP"
 WAN_PY = WAN_DIR / ".venv" / "bin" / "python"
 WAN_OUT = WAN_DIR / "outputs"
 COMFY_OUT = BASE / "ComfyUI" / "output"
+MM_DIR = BASE / "MMAudio"
+MM_PY = MM_DIR / ".venv" / "bin" / "python"
+MM_OUT = MM_DIR / "output" / "prompter"
+FF_SHARED = BASE / "ffmpeg-shared" / "lib"  # torchcodec's substrate — see the runbook
 
 OLLAMA = "http://localhost:11434"
 COMFY = "http://localhost:8188"
@@ -56,6 +61,9 @@ WAN_RECIPE = {
 
 stage_lock = threading.Lock()
 stage_job = {"state": "idle"}  # idle | running | done | failed
+
+foley_lock = threading.Lock()
+foley_job = {"state": "idle"}  # idle | running | done | failed
 
 
 def http_json(url, payload=None, timeout=10):
@@ -193,6 +201,29 @@ def run_stage_job(settings_path, log_path):
     )
 
 
+def run_foley_job(cmd, log_path, out_dir):
+    global foley_job
+    # torchcodec dlopens the FFmpeg SHARED libs — the booth injects the substrate
+    # so the Foley Booth works from any shell (the static binaries carry no .so).
+    env = dict(os.environ)
+    env["LD_LIBRARY_PATH"] = ":".join(filter(None, [str(FF_SHARED), env.get("LD_LIBRARY_PATH")]))
+    with open(log_path, "wb") as log:
+        proc = subprocess.Popen(cmd, cwd=MM_DIR, stdout=log, stderr=subprocess.STDOUT, env=env)
+        foley_job.update({"pid": proc.pid})
+        code = proc.wait()
+    new_files = sorted(
+        p.name for p in out_dir.glob("*") if p.suffix.lower() in (".flac", ".mp4")
+    ) if out_dir.exists() else []
+    foley_job.update(
+        {
+            "state": "done" if code == 0 and new_files else "failed",
+            "exit_code": code,
+            "outputs": [f"{out_dir.name}/{n}" for n in new_files],
+            "finished": datetime.now().isoformat(timespec="seconds"),
+        }
+    )
+
+
 def tail_lines(path, n=25):
     try:
         raw = Path(path).read_bytes()[-16384:].decode(errors="replace")
@@ -246,12 +277,18 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_file(COMFY_OUT, path[len("/face-output/"):])
         if path.startswith("/stage-output/"):
             return self.send_file(WAN_OUT, path[len("/stage-output/"):])
+        if path.startswith("/foley-output/"):
+            return self.send_file(MM_OUT, path[len("/foley-output/"):])
         if path == "/api/status":
             return self.api_status()
         if path == "/api/footage":
             return self.api_footage()
         if path == "/api/stage/job":
             return self.api_stage_job()
+        if path == "/api/foley/job":
+            return self.api_foley_job()
+        if path == "/api/foley/sources":
+            return self.api_foley_sources()
         if path.startswith("/api/face/result/"):
             return self.api_face_result(path.rsplit("/", 1)[-1])
         self.fail("The booth has no such window.", 404)
@@ -267,6 +304,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/face/generate": self.api_face_generate,
             "/api/stage/generate": self.api_stage_generate,
             "/api/stage/cast": self.api_stage_cast,
+            "/api/foley/generate": self.api_foley_generate,
         }.get(self.path)
         if not route:
             return self.fail("The booth has no such window.", 404)
@@ -290,6 +328,8 @@ class Handler(BaseHTTPRequestHandler):
             "face_shop": comfy,
             "stage_ui": {"up": port_open(WAN_UI_PORT)},
             "stage_job": {k: v for k, v in stage_job.items() if k != "pid"},
+            "foley": {"installed": MM_PY.exists(),
+                      "job_state": foley_job.get("state", "idle")},
         })
 
     def api_footage(self):
@@ -431,6 +471,79 @@ class Handler(BaseHTTPRequestHandler):
 
     def api_stage_job(self):
         info = {k: v for k, v in stage_job.items() if k != "pid"}
+        if info.get("log"):
+            info["log_tail"] = tail_lines(JOB_LOGS / info["log"])
+        self.reply(info)
+
+    # -- the foley booth (MMAudio: text-to-audio + video-synced audio) ---
+    def api_foley_sources(self):
+        """Everything the booth can score: footage reels and fresh Stage takes."""
+        def reels(root):
+            if not root.exists():
+                return []
+            return sorted(
+                str(p.relative_to(root)) for p in root.glob("**/*")
+                if p.is_file() and p.suffix.lower() in (".mp4", ".webm", ".mkv")
+            )
+        self.reply({"footage": reels(FOOTAGE), "stage": reels(WAN_OUT)})
+
+    def api_foley_generate(self, p):
+        global foley_job
+        if not MM_PY.exists():
+            return self.fail("The Foley Booth is not bolted down — MMAudio/.venv is missing. "
+                             "The runbook's Foley Booth section has the recipe.", 503)
+        prompt = (p.get("prompt") or "").strip()
+        video = (p.get("video") or "").strip()
+        if not prompt and not video:
+            return self.fail("The Foley Booth needs a cue (prompt), a reel to score (video), or both.")
+        video_path = None
+        if video:
+            root = WAN_OUT if p.get("video_from") == "stage" else FOOTAGE
+            video_path = (root / video).resolve()
+            if not video_path.is_relative_to(root.resolve()) or not video_path.is_file():
+                return self.fail(f"'{video}' is not on that shelf.", 404)
+        if stage_job.get("state") == "running":
+            return self.fail("The Stage is mid-performance — the GPU cannot serve two masters. "
+                             "Wait for the take to finish.", 409)
+        if port_open(WAN_UI_PORT):
+            return self.fail("The Wan2GP UI is holding the stage on :7860 — close it, then cue again.", 409)
+        if not foley_lock.acquire(blocking=False):
+            return self.fail("The Foley Booth is mid-take — one score at a time.", 409)
+        try:
+            if foley_job.get("state") == "running":
+                return self.fail("The Foley Booth is mid-take — one score at a time.", 409)
+            evicted = evict_llms()
+            # ~6 GB in 16-bit; 8 asked so the take never lands on a knife's edge.
+            ok, free = clear_the_set(min_vram_gb=8)
+            if not ok:
+                return self.fail(
+                    f"The stagehands could not clear the GPU for the Foley Booth — {free:.1f} GB "
+                    "free, 8 needed. Give the Face Shop a moment to strike its set and cue again.", 503)
+            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            # Per-cue output dir: MMAudio names files by prompt slug, so two seeds of the
+            # SAME prompt into one dir silently overwrite (day-one scar, see the runbook).
+            out_dir = MM_OUT / stamp
+            out_dir.mkdir(parents=True, exist_ok=True)
+            JOB_LOGS.mkdir(parents=True, exist_ok=True)
+            cmd = [str(MM_PY), "demo.py",
+                   "--duration", str(float(p.get("duration", 8))),
+                   "--seed", str(int(p.get("seed", 7))),
+                   "--negative_prompt", (p.get("negative_prompt") or "").strip(),
+                   "--prompt", prompt,
+                   "--output", str(out_dir)]
+            if video_path:
+                cmd += ["--video", str(video_path)]
+            log_path = JOB_LOGS / f"foley-{stamp}.log"
+            foley_job = {"state": "running", "started": datetime.now().isoformat(timespec="seconds"),
+                         "out_dir": out_dir.name, "log": log_path.name, "seed": int(p.get("seed", 7)),
+                         "scored": video or None}
+            threading.Thread(target=run_foley_job, args=(cmd, log_path, out_dir), daemon=True).start()
+            self.reply({"state": "running", "out_dir": out_dir.name, "evicted": evicted})
+        finally:
+            foley_lock.release()
+
+    def api_foley_job(self):
+        info = {k: v for k, v in foley_job.items() if k != "pid"}
         if info.get("log"):
             info["log_tail"] = tail_lines(JOB_LOGS / info["log"])
         self.reply(info)

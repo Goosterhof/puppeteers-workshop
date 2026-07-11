@@ -192,6 +192,7 @@
     <button role="tab" aria-selected="true" data-tab="forge">Forge</button>
     <button role="tab" aria-selected="false" data-tab="stage">The Stage</button>
     <button role="tab" aria-selected="false" data-tab="face">Face Shop</button>
+    <button role="tab" aria-selected="false" data-tab="foley">Foley Booth</button>
     <button role="tab" aria-selected="false" data-tab="house-stage">Stage UI</button>
     <button role="tab" aria-selected="false" data-tab="house-face">Face Shop UI</button>
   </nav>
@@ -263,6 +264,28 @@
       <p class="note">Flux 2 Klein 9B, 4-step distilled — a take lands in seconds once the model is warm.</p>
       <p class="error" id="face-error" hidden></p>
       <div class="result" id="face-result"></div>
+    </div>
+  </section>
+
+  <!-- FOLEY BOOTH -->
+  <section id="tab-foley" hidden>
+    <div class="panel">
+      <label class="field" for="foley-prompt">The cue — what should it sound like</label>
+      <textarea id="foley-prompt" placeholder="a man screams in terror as he falls, classic movie stock scream"></textarea>
+      <label class="field" for="foley-video">The reel — optional: score a video (audio lands ON the motion)</label>
+      <select id="foley-video">
+        <option value="">— no reel: pure text-to-audio —</option>
+      </select>
+      <div class="row" style="margin-top:14px">
+        <div><label class="field" for="foley-neg">Negative cue</label><input id="foley-neg" type="text" value="music, background music, melody"></div>
+        <div><label class="field" for="foley-dur">Seconds</label><input id="foley-dur" type="number" value="8" min="1" max="30" step="1"></div>
+        <div><label class="field" for="foley-seed">Seed</label><input id="foley-seed" type="number" value="7"></div>
+        <div><button class="fire" id="foley-go" style="margin-top:0">Cue the foley booth</button></div>
+      </div>
+      <p class="note">MMAudio (T2A + V2A) — with a reel picked, the sync module watches the frames and the duration snaps to the clip; without one, 8&nbsp;s is the trained sweet spot (trim the sting after). The "music" negative cue earns its seat — the model loves to score things unasked. ~6&nbsp;GB VRAM; weights CC-BY-NC — internal tooling only (runbook).</p>
+      <p class="error" id="foley-error" hidden></p>
+      <div id="foley-log" hidden></div>
+      <div class="result" id="foley-result"></div>
     </div>
   </section>
 
@@ -409,7 +432,12 @@ function watchStage() {
     if (job.state === 'done') {
       $('stage-result').innerHTML = (job.outputs || []).map(f =>
         `<video controls loop src="/stage-output/${encodeURIComponent(f)}"></video>
-         <span class="cap">${f} · seed ${job.seed}</span>`).join('');
+         <span class="cap">${f} · seed ${job.seed}
+           <button class="cast" data-score="${encodeURIComponent(f)}">Score it in the foley booth →</button></span>`).join('');
+      $('stage-result').querySelectorAll('[data-score]').forEach(b => b.addEventListener('click', async () => {
+        await loadFoleySources('stage:' + decodeURIComponent(b.dataset.score));
+        openTab('foley');
+      }));
     } else if (job.state === 'failed') {
       showError('stage-error', {message: `The take collapsed (exit ${job.exit_code}). The last lines of the log above tell you where — fix the cue and call it again.`});
     }
@@ -455,6 +483,62 @@ $('face-go').addEventListener('click', async () => {
     }, 1500);
   } catch (e) { $('face-go').disabled = false; showError('face-error', e); }
 });
+
+/* ---- foley booth ---- */
+let foleyPoller = null;
+async function loadFoleySources(preselect) {
+  const {footage, stage} = await api('/api/foley/sources');
+  const sel = $('foley-video');
+  const keep = preselect ?? sel.value;
+  sel.innerHTML = '<option value="">— no reel: pure text-to-audio —</option>';
+  const group = (label, items, from) => {
+    if (!items.length) return;
+    const g = document.createElement('optgroup'); g.label = label;
+    items.forEach(name => {
+      const o = document.createElement('option');
+      o.value = from + ':' + name; o.textContent = name;
+      g.appendChild(o);
+    });
+    sel.appendChild(g);
+  };
+  group('Stage takes', stage, 'stage');
+  group('Footage', footage, 'footage');
+  if (keep && [...sel.options].some(o => o.value === keep)) sel.value = keep;
+}
+loadFoleySources();
+$('foley-go').addEventListener('click', async () => {
+  clearError('foley-error');
+  const [from, ...rest] = ($('foley-video').value || ':').split(':');
+  try {
+    await api('/api/foley/generate', {
+      prompt: $('foley-prompt').value, negative_prompt: $('foley-neg').value,
+      duration: +$('foley-dur').value, seed: +$('foley-seed').value,
+      video: rest.join(':'), video_from: from || undefined,
+    });
+    $('foley-result').innerHTML = ''; $('foley-log').hidden = false;
+    watchFoley();
+  } catch (e) { showError('foley-error', e); }
+});
+function watchFoley() {
+  clearInterval(foleyPoller);
+  foleyPoller = setInterval(async () => {
+    const job = await api('/api/foley/job');
+    $('foley-log').textContent = (job.log_tail || []).join('\n');
+    $('foley-log').scrollTop = $('foley-log').scrollHeight;
+    if (job.state === 'running') return;
+    clearInterval(foleyPoller);
+    if (job.state === 'done') {
+      $('foley-result').innerHTML = (job.outputs || []).map(f => f.endsWith('.mp4')
+        ? `<video controls loop src="/foley-output/${encodeURIComponent(f)}"></video>
+           <span class="cap">${f} · seed ${job.seed} · the composite — sound on the frames</span>`
+        : `<audio controls src="/foley-output/${encodeURIComponent(f)}"></audio>
+           <span class="cap">${f} · seed ${job.seed}</span>`).join('');
+    } else if (job.state === 'failed') {
+      showError('foley-error', {message: `The score collapsed (exit ${job.exit_code}). The log above names the broken instrument — first cold run downloads the weights, give that one time.`});
+    }
+  }, 3000);
+}
+api('/api/foley/job').then(j => { if (j.state === 'running') { $('foley-log').hidden = false; watchFoley(); } });
 </script>
 </body>
 </html>
