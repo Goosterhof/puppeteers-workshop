@@ -17,6 +17,7 @@
 | 6 | Voice cloning (OmniVoice) | Wan2GP — OmniVoice TTS (zero-shot clone from short clip) | with #1 |
 | 7 | Relay Prompt | Wan2GP — LTX2 time-ranged prompts: `[25%:50%] the character says "…"` | with #1 |
 | 8 | Omni LoRA (a/v sync) | Wan2GP — LTX2 OmniNFT LoRA preset | with #1 |
+| 9 | Sound effects + foley (T2A / V2A) | **MMAudio** — text-to-audio and video-synchronized audio | installed (2026-07-11) |
 
 ## Layout
 
@@ -27,6 +28,8 @@ video-lab/
 │   ├── custom_nodes/ComfyUI-GGUF/     # loads the Klein GGUF quants
 │   └── models/{diffusion_models,text_encoders,vae}/
 ├── crop-tool/         # step 3 — exact-resolution cropper (to build)
+├── MMAudio/           # hkchengrex/MMAudio, .venv python 3.11, torch 2.13 cu130 — the Foley Booth
+├── ffmpeg-shared/     # BtbN FFmpeg 7.1 SHARED build — torchcodec's substrate (see The Foley Booth)
 ├── start-wangp.sh     # → http://localhost:7860
 └── start-comfyui.sh   # → http://localhost:8188
 ```
@@ -48,6 +51,55 @@ optional. Not required — BF16 GGUF is already ≥ fp8 quality.
 
 **Character-swap extras spotted on HF (untested):** `nhathoangfoto/Flux.2-Klein-9B-SmartCharacterSwap`,
 `thedeoxen/refcontrol-FLUX.2-klein-9B-reference-pose-lora`, `dx8152/Flux2-Klein-9B-Consistency`.
+
+## The Foley Booth — MMAudio (added 2026-07-11)
+
+Text-to-audio AND video-to-audio (flow-matching, CVPR 2025). The V2A half watches
+the frames through a sync module, so a silent take comes back with its sound
+landing on the motion — the crier's bell swing was its first customer. ~6 GB VRAM
+in 16-bit; `large_44k_v2` weights auto-download ungated from HF on first run.
+
+**License posture:** code MIT, weights **CC-BY-NC 4.0**. The investor accepted the
+non-commercial weights for internal tooling (2026-07-11) — fine for lab benches and
+internal consoles; anything outward-facing or sold regenerates its audio with a
+commercially-clear tool.
+
+**Bolting it down from scratch:**
+
+```bash
+cd ~/code/video-lab && git clone https://github.com/hkchengrex/MMAudio.git
+cd MMAudio && uv venv --python 3.11 .venv
+uv pip install --python .venv/bin/python torch torchaudio torchvision \
+  --index-url https://download.pytorch.org/whl/cu130
+uv pip install --python .venv/bin/python -e .
+# torchcodec needs FFmpeg SHARED libs (libavutil.so.*) — the static binaries in
+# ~/.local/bin carry none, and there is no sudo. The cure: BtbN's shared build.
+mkdir -p ../ffmpeg-shared && curl -sL -o /tmp/ff.tar.xz \
+  "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-shared-7.1.tar.xz"
+tar -xf /tmp/ff.tar.xz --strip-components=1 -C ../ffmpeg-shared
+```
+
+**Running takes** (always with the substrate on the path):
+
+```bash
+export LD_LIBRARY_PATH="$HOME/code/video-lab/ffmpeg-shared/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+.venv/bin/python demo.py --duration=8 --seed 7 --negative_prompt "music" \
+  --prompt "a man screams in terror" --output output/screams           # T2A
+.venv/bin/python demo.py --seed 7 --video <take.mp4> \
+  --prompt "a small brass hand bell rings brightly" --output output/takes  # V2A
+```
+
+Hard-won on day one:
+- **Output filename = prompt slug** — two seeds of the SAME prompt into the same
+  `--output` dir silently overwrite each other. Per-run output dirs or rename
+  between runs.
+- V2A snaps duration to the clip; T2A holds best at the trained 8 s — generate
+  long, trim the sting with ffmpeg.
+- Negative-prompt `"music, background music, melody"` — the README's own warning
+  about unsolicited scoring, confirmed worth pinning.
+- GPU discipline unchanged: check `nvidia-smi` / `ollama ps` before a run like
+  every other machine on the floor (~6 GB ask, coexists with more than the
+  diffusion stacks do, but the one-performance rule stands).
 
 ## The Prompt Forge — local LLMs (added 2026-07-09)
 

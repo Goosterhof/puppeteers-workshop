@@ -3,6 +3,10 @@
 # documents how to bolt them down again from scratch.
 /Wan2GP/
 /ComfyUI/
+/MMAudio/
+# FFmpeg SHARED libraries (BtbN build) — torchcodec's substrate; the static
+# binaries in ~/.local/bin carry no .so files. Re-bolt per the runbook.
+/ffmpeg-shared/
 
 # The footage archive — personal media (the puppeteer's own face among it).
 # Never leaves the building.

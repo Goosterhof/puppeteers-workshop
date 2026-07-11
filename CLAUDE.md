@@ -19,6 +19,8 @@ installed on the workshop floor and are **never tracked**:
 |---|---|
 | `Wan2GP/` (~93 GB) | deepbeepmeep/Wan2GP clone + venv + Wan 2.2 / SCAIL-2 / OmniVoice weights |
 | `ComfyUI/` (~30 GB) | ComfyUI clone + venv + Flux 2 Klein 9B GGUF stack |
+| `MMAudio/` (~10 GB) | hkchengrex/MMAudio clone + venv — **the Foley Booth**: text-to-audio + video-synchronized audio (weights CC-BY-NC, internal tooling only — see runbook) |
+| `ffmpeg-shared/` | BtbN FFmpeg 7.1 shared libs — torchcodec's substrate (sudo-free) |
 | `footage/` | personal media — start images, driving video, casting archive |
 
 **The canonical working bench is `~/code/video-lab`** — the only checkout with
