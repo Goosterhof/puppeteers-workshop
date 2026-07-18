@@ -14,6 +14,7 @@ import mimetypes
 import os
 import shutil
 import socket
+import struct
 import subprocess
 import sys
 import threading
@@ -189,6 +190,7 @@ def stage_playbill():
 
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp")
 VIDEO_EXTS = (".mp4", ".webm", ".mkv")
+FFPROBE = shutil.which("ffprobe") or str(Path.home() / ".local" / "bin" / "ffprobe")
 
 stage_lock = threading.Lock()
 stage_job = {"state": "idle"}  # idle | running | done | failed
@@ -377,6 +379,101 @@ def run_foley_job(cmd, log_path, out_dir):
     )
 
 
+_label_cache = {}  # str(path) -> (mtime, meta)
+
+
+def canister_meta(path, mtime, meta_fn):
+    key = str(path)
+    hit = _label_cache.get(key)
+    if hit and hit[0] == mtime:
+        return hit[1]
+    try:
+        meta = meta_fn(path)
+    except Exception:
+        meta = {}  # an unreadable label never blocks the shelf
+    _label_cache[key] = (mtime, meta)
+    return meta
+
+
+def ffprobe_format(path):
+    out = subprocess.run(
+        [FFPROBE, "-v", "quiet", "-print_format", "json", "-show_format", str(path)],
+        capture_output=True, text=True, timeout=15,
+    )
+    return json.loads(out.stdout or "{}").get("format", {})
+
+
+def stage_label(path):
+    """Wan2GP writes its entire settings dict into the mp4 comment tag."""
+    meta = {}
+    fmt = ffprobe_format(path)
+    if (d := fmt.get("duration")):
+        meta["duration_s"] = round(float(d), 1)
+    try:
+        cfg = json.loads(fmt.get("tags", {}).get("comment", ""))
+    except (json.JSONDecodeError, TypeError):
+        cfg = {}
+    for src, dst in (("prompt", "prompt"), ("seed", "seed"),
+                     ("num_inference_steps", "steps"), ("guidance_scale", "guidance"),
+                     ("resolution", "resolution"), ("video_length", "frames"),
+                     ("model_type", "model"), ("model_filename", "model"),
+                     ("activated_loras", "loras")):
+        if dst not in meta and cfg.get(src) not in (None, "", []):
+            meta[dst] = cfg[src]
+    if isinstance(meta.get("loras"), list):
+        meta["loras"] = [Path(str(l)).stem for l in meta["loras"]]
+    if isinstance(meta.get("model"), str):
+        meta["model"] = Path(meta["model"]).stem
+    return meta
+
+
+def png_text_chunks(path, cap=1 << 20):
+    data = path.read_bytes()
+    pos, out = 8, {}
+    while pos < min(len(data), cap) - 8:
+        ln, typ = struct.unpack(">I4s", data[pos:pos + 8])
+        if typ in (b"tEXt", b"iTXt"):
+            key, _, val = data[pos + 8:pos + 8 + ln].partition(b"\x00")
+            out[key.decode(errors="replace")] = val.lstrip(b"\x00").decode(errors="replace")
+        if typ == b"IDAT":
+            break
+        pos += 12 + ln
+    return out
+
+
+def painting_label(path):
+    """ComfyUI embeds the API graph in the PNG 'prompt' text chunk —
+    booth cues and full-UI paintings alike. Walk it defensively."""
+    meta = {}
+    if path.suffix.lower() != ".png":
+        return meta
+    graph = json.loads(png_text_chunks(path).get("prompt", "{}"))
+    dims = {}
+    for node in graph.values():
+        ct, inputs = node.get("class_type", ""), node.get("inputs", {})
+        if ct == "CLIPTextEncode" and isinstance(inputs.get("text"), str) and "prompt" not in meta:
+            meta["prompt"] = inputs["text"]
+        for k in ("unet_name", "ckpt_name"):
+            if isinstance(inputs.get(k), str) and "model" not in meta:
+                meta["model"] = Path(inputs[k]).stem
+        for k in ("noise_seed", "seed"):
+            if isinstance(inputs.get(k), int) and "seed" not in meta:
+                meta["seed"] = inputs[k]
+        if isinstance(inputs.get("steps"), int) and "steps" not in meta:
+            meta["steps"] = inputs["steps"]
+        if isinstance(inputs.get("width"), int) and isinstance(inputs.get("height"), int):
+            dims = {"resolution": f"{inputs['width']}x{inputs['height']}"}
+    return meta | dims
+
+
+def foley_label(path):
+    """MMAudio names files by prompt slug inside a per-cue stamp dir."""
+    meta = {"prompt": path.stem.replace("_", " ").strip()}
+    if (d := ffprobe_format(path).get("duration")):
+        meta["duration_s"] = round(float(d), 1)
+    return meta
+
+
 def tail_lines(path, n=25):
     try:
         raw = Path(path).read_bytes()[-16384:].decode(errors="replace")
@@ -494,27 +591,33 @@ class Handler(BaseHTTPRequestHandler):
         })
 
     def api_archive(self):
-        """The racks — every previous take still hanging in the output rooms.
+        """The canisters — every previous take still hanging in the output rooms.
 
-        The booth itself is stateless between page loads; the racks let the
-        UI show history straight from the filesystem, newest first.
+        The booth itself is stateless between page loads; this window reads
+        history straight from the filesystem, newest first, and reads each
+        canister's label: Wan2GP embeds its full settings in the mp4 comment
+        tag (metadata_type "metadata"), ComfyUI embeds the graph in PNG text
+        chunks. Probed once per file, cached by mtime.
         """
-        def rack(root, exts, recurse=False, limit=150):
+        def rack(root, exts, meta_fn, recurse=False, limit=150):
             if not root.exists():
                 return []
             items = []
             for p in (root.glob("**/*") if recurse else root.iterdir()):
                 if p.is_file() and p.suffix.lower() in exts:
+                    st = p.stat()
                     kind = ("image" if p.suffix.lower() in IMAGE_EXTS
                             else "audio" if p.suffix.lower() == ".flac" else "video")
                     items.append({"name": str(p.relative_to(root)),
-                                  "mtime": int(p.stat().st_mtime), "kind": kind})
+                                  "mtime": int(st.st_mtime), "size": st.st_size,
+                                  "kind": kind,
+                                  "meta": canister_meta(p, st.st_mtime, meta_fn)})
             items.sort(key=lambda x: -x["mtime"])
             return items[:limit]
         self.reply({
-            "stage": rack(WAN_OUT, VIDEO_EXTS + IMAGE_EXTS),
-            "face": rack(COMFY_OUT, IMAGE_EXTS),
-            "foley": rack(MM_OUT, (".flac", ".mp4"), recurse=True),
+            "stage": rack(WAN_OUT, VIDEO_EXTS + IMAGE_EXTS, stage_label),
+            "face": rack(COMFY_OUT, IMAGE_EXTS, painting_label),
+            "foley": rack(MM_OUT, (".flac", ".mp4"), foley_label, recurse=True),
         })
 
     def api_footage(self):

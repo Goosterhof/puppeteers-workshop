@@ -167,14 +167,20 @@ pipeline (stdlib Python, `prompter-box/`, no venv):
   (`jobs/prompter-*.json`) are take artifacts, gitignored.
 - **The Canisters** (2026-07-18) — the dedicated archive tab. Every
   previous take, painting, and score served straight off the output dirs
-  (`/api/archive`, newest first, 150 per room), in one filterable
-  gallery: search box (filename carries prompt slug + seed), room pills
-  (Stage / Face Shop / Foley), kind pills (reels / stills / audio).
-  Click a canister to mount it in the viewer with its actions live —
-  stage reels get "Score it in the foley booth", stage stills "Cast as a
-  lead", paintings "Send to the stage". Refreshes on tab entry and after
-  every finished job. (Replaced the short-lived per-panel racks the same
-  day — history lives in its own room, the working panels stay lean.)
+  (`/api/archive`, newest first, 150 per room) as **labeled cards**: the
+  booth reads each canister's embedded recipe — Wan2GP writes its full
+  settings into the mp4 comment tag (`metadata_type: "metadata"` in
+  `wgp_config.json`), ComfyUI embeds the API graph in PNG text chunks
+  (full-UI paintings included), MMAudio's prompt is its filename slug.
+  Cards show prompt, model, seed, steps, cfg, resolution, frames,
+  duration, LoRAs worn, age, size — probed once per file (ffprobe /
+  pure-python PNG chunk walk), cached by mtime. Filters: search (matches
+  metadata too, so `fastwan` or a seed finds takes), room pills, kind
+  pills. Mounting a canister shows the full cue with **"Copy the cue"**
+  plus its pipeline actions — stage reels score in the foley booth,
+  stage stills cast as leads, paintings send to the stage. Refreshes on
+  tab entry and after every finished job. (Replaced the short-lived
+  per-panel racks the same day — history lives in its own room.)
 - **Face Shop** — headless text-to-image via the ComfyUI API (needs
   `./start-comfyui.sh` running); result renders inline in seconds. A
   **painter dropdown** (2026-07-18) enumerates `ComfyUI/models/
