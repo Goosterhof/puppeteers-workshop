@@ -214,9 +214,19 @@ pipeline (stdlib Python, `prompter-box/`, no venv):
   `LD_LIBRARY_PATH` for torchcodec's FFmpeg-shared substrate itself. Guarded
   at 8 GB via the same fail-closed stagehands; refused while the Stage or the
   full Wan UI performs.
-- **VRAM choreography** — cue lights show what's loaded; every generation cue
-  auto-evicts loaded LLMs first; "Clear the boards" evicts by hand. Stage cues
-  are refused while the full Wan2GP UI holds :7860 (one GPU, one performance).
+- **VRAM choreography** — the callboard (2026-07-18, chaos #00084 det. 8) is
+  the booth's dominant live object: four station plates (Forge / Face Shop /
+  Stage / Foley) each with a lamp-eye — ready green, standby amber, LIVE
+  filament (one sun at most, per the mutex), HELD cue-red when the full Wan2GP
+  UI occupies :7860 (a held stage refuses every cue — red, never green) — plus
+  a stage-load dimmer fed only by the Face Shop's real VRAM numbers ("— no
+  meter · Face Shop dark" when it isn't up; the poll carries no other VRAM
+  truth). Every generation cue auto-evicts loaded LLMs first; "Clear the
+  boards" is the master blackout — lamps cool L→R, the reply voiced on the
+  button. While a take runs the page's header wash warms (`body.take-running`).
+  Fresh results mount as stamped prints (the archive's canister DNA with a
+  "Fresh" stamp instead of an age chip); design record in the lab's
+  `documents/wireframes/00037-wire-prompter-box-callboard.md`.
 - **The Stagehands' Guard (FAIL-CLOSED — incident 2026-07-09)** — before the
   forge loads an LLM (13 GB VRAM needed) or the Stage starts a take (26 GB
   for 14B-class performers, scaled down to 12 GB for the 5B — the playbill

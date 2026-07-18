@@ -17,6 +17,12 @@
     --dim: #9a8b74;
     --cue-red: #c2543a;
     --go-green: #7da16b;
+    --stage-off: #241c14;   /* lamp present but unlit */
+    --stage-dead: #17130f;  /* lost-contact */
+    --filament: #ffd27a;    /* hot core, live only */
+    --plate-face: #1d1610;
+    --plate-edge: #3a2e1f;
+    --meter-well: #0d0b08;
     --display: 'Oswald', 'Arial Narrow', 'Helvetica Neue', sans-serif;
     --body: system-ui, 'Segoe UI', sans-serif;
     --typed: 'Courier Prime', 'Courier New', monospace;
@@ -44,21 +50,61 @@
     color: var(--lamp);
   }
   h1 small { display: block; font-size: 11px; letter-spacing: .3em; color: var(--dim); font-weight: 400; }
-  #lamps { display: flex; gap: 22px; margin-left: auto; align-items: center; }
-  .lamp { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
-  .lamp i {
-    width: 11px; height: 11px; border-radius: 50%;
-    background: #3c3226; box-shadow: inset 0 1px 2px rgba(0,0,0,.6);
+  /* the amber wash while a take runs — the mutex felt page-wide */
+  body.take-running { background-image: radial-gradient(ellipse 900px 340px at 50% -80px, rgba(232,176,74,.24), transparent 70%); }
+
+  /* ---- the callboard (who holds the stage) ---- */
+  .callboard {
+    display: flex; flex-wrap: wrap; align-items: stretch; gap: 12px;
+    padding: 16px 20px; margin: 0 -20px 6px;
+    background: var(--drape); border-bottom: 1px solid var(--drape-edge);
   }
-  .lamp.standby i { background: var(--cue-red); box-shadow: 0 0 7px rgba(194,84,58,.7); }
-  .lamp.go i { background: var(--go-green); box-shadow: 0 0 7px rgba(125,161,107,.7); }
-  .lamp.live i { background: var(--lamp); box-shadow: 0 0 8px rgba(232,176,74,.85); animation: pulse 1.4s ease-in-out infinite; }
-  @keyframes pulse { 50% { opacity: .45; } }
-  #vram { font-size: 11px; letter-spacing: .1em; }
+  .station {
+    flex: 1 1 150px; min-width: 140px; display: grid;
+    grid-template-columns: auto 1fr; gap: 2px 10px; align-items: center;
+    background: var(--plate-face); border: 1px solid var(--plate-edge); border-radius: 3px;
+    padding: 12px 14px;
+  }
+  .station .eye {
+    grid-row: 1 / 5; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--stage-off); box-shadow: inset 0 1px 3px rgba(0,0,0,.7);
+    transition: background .42s ease, box-shadow .42s ease;
+  }
+  .station .pos { font: 500 13px var(--display); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); grid-column: 2; }
+  .station .cue { font-size: 10px; letter-spacing: .1em; color: var(--dim); grid-column: 2; }
+  .station .state { font: 11px var(--display); letter-spacing: .18em; text-transform: uppercase; grid-column: 2; color: var(--dim); }
+  .station .read { font: 10px var(--typed); color: var(--dim); grid-column: 2; opacity: .8; min-height: 1em; }
+  .station.ready   .eye { background: var(--go-green); box-shadow: 0 0 8px rgba(125,161,107,.6); }
+  .station.ready   .state { color: var(--go-green); }
+  .station.standby .eye { background: var(--lamp-dim); box-shadow: 0 0 6px rgba(138,106,46,.5); }
+  .station.standby .state { color: var(--lamp); }
+  .station.held    .eye { background: var(--cue-red); box-shadow: 0 0 8px rgba(194,84,58,.6); }
+  .station.held    .state { color: var(--cue-red); }
+  .station.live { background: #241a10; border-color: var(--lamp-dim); box-shadow: 0 0 22px rgba(232,176,74,.22); }
+  .station.live .eye {
+    background: radial-gradient(circle at 40% 35%, var(--filament), var(--lamp) 70%);
+    box-shadow: 0 0 14px rgba(232,176,74,.9); animation: eye-pulse 1.4s ease-in-out infinite;
+  }
+  .station.live .state { color: var(--filament); font-weight: 600; }
+  @keyframes eye-pulse { 50% { opacity: .5; } }
+  .callboard.cold .station .eye { background: var(--stage-dead); box-shadow: inset 0 1px 3px rgba(0,0,0,.7); animation: none; }
+  /* the blackout — lamps cool L→R like killing the work lights */
+  .callboard.blackout .station .eye {
+    background: var(--stage-off) !important;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,.7) !important; animation: none !important;
+  }
+  .callboard.blackout .station:nth-child(2) .eye { transition-delay: .08s; }
+  .callboard.blackout .station:nth-child(3) .eye { transition-delay: .16s; }
+  .callboard.blackout .station:nth-child(4) .eye { transition-delay: .24s; }
+  .dimmer { flex: 1 1 180px; display: flex; flex-direction: column; justify-content: center; gap: 5px; }
+  .dimmer .occ-label { font: 10px var(--display); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); }
+  .dimmer .track { height: 8px; background: var(--meter-well); border-radius: 4px; overflow: hidden; }
+  .dimmer .track i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--lamp-dim), var(--lamp)); transition: width .4s ease; }
+  .dimmer .occ-read { font: 11px var(--typed); color: var(--dim); }
   #evict {
-    background: none; border: 1px solid var(--drape-edge); color: var(--dim);
+    align-self: center; background: none; border: 1px solid var(--drape-edge); color: var(--dim);
     font: 11px var(--display); letter-spacing: .18em; text-transform: uppercase;
-    padding: 5px 12px; cursor: pointer; border-radius: 2px;
+    padding: 8px 14px; cursor: pointer; border-radius: 2px;
   }
   #evict:hover { border-color: var(--lamp-dim); color: var(--lamp); }
 
@@ -181,9 +227,37 @@
     font: 12px var(--typed); color: var(--dim); padding: 12px 14px;
     max-height: 220px; overflow-y: auto; margin-top: 16px; white-space: pre-wrap;
   }
-  .result { margin-top: 18px; display: grid; gap: 12px; justify-items: start; }
-  .result video, .result img { max-width: 100%; max-height: 65vh; border-radius: 3px; box-shadow: 0 4px 18px rgba(0,0,0,.5); }
+  .result { margin-top: 18px; display: grid; gap: 16px; justify-items: start; }
   .result .cap { font-size: 12px; letter-spacing: .08em; }
+  #arch-view video, #arch-view img { max-width: 100%; max-height: 65vh; border-radius: 3px; box-shadow: 0 4px 18px rgba(0,0,0,.5); }
+  /* ---- the stamped mount ("The Print") — fresh takes framed like developed prints ---- */
+  .mount {
+    margin: 0; max-width: 760px; width: 100%;
+    background: var(--paper);
+    background-image: linear-gradient(175deg, var(--paper) 82%, var(--paper-shade));
+    border-radius: 3px; box-shadow: 0 4px 20px rgba(0,0,0,.5); overflow: hidden;
+  }
+  .mount-frame { position: relative; background: #0d0b08; display: flex; justify-content: center; }
+  .mount-frame video, .mount-frame img { max-width: 100%; max-height: 62vh; display: block; }
+  .mount-frame audio { width: 100%; margin: 20px; }
+  .mount-stamp {
+    position: absolute; top: 0; right: 0;
+    font: 11px var(--display); letter-spacing: .26em; text-transform: uppercase; color: var(--ink);
+    background: var(--lamp); padding: 5px 16px 5px 12px;
+    clip-path: polygon(14px 0, 100% 0, 100% 100%, 0 100%);
+  }
+  .mount-body { padding: 14px 18px 16px; color: var(--ink); }
+  .mount-title { font: 13.5px var(--typed); line-height: 1.55; color: var(--ink); }
+  .mount-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
+  .mount .chip { border-color: #c9b98f; color: #6b5a3d; }
+  .mount .chip.room { color: #8a6a2e; border-color: #8a6a2e; }
+  .mount-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .mount-acts .act {
+    background: none; border: 1px solid #b9a985; color: #6b5a3d;
+    font: 11px var(--display); letter-spacing: .16em; text-transform: uppercase;
+    padding: 6px 12px; cursor: pointer; border-radius: 2px;
+  }
+  .mount-acts .act:hover { border-color: var(--ink); color: var(--ink); }
   .cast {
     background: none; border: 1px solid var(--drape-edge); color: var(--dim);
     font: 11px var(--display); letter-spacing: .16em; text-transform: uppercase;
@@ -197,7 +271,7 @@
 
   @media (max-width: 640px) {
     header { padding-top: 20px; }
-    #lamps { margin-left: 0; flex-wrap: wrap; gap: 12px; }
+    .station { min-width: 120px; }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
@@ -213,14 +287,32 @@
 <main>
   <header>
     <h1>The Prompter's Box<small>the booth that feeds the lines</small></h1>
-    <div id="lamps">
-      <span class="lamp" id="lamp-forge"><i></i>Forge</span>
-      <span class="lamp" id="lamp-face"><i></i>Face Shop</span>
-      <span class="lamp" id="lamp-stage"><i></i>Stage</span>
-      <span id="vram"></span>
-      <button id="evict" title="Unload every LLM from the GPU">Clear the boards</button>
-    </div>
   </header>
+
+  <div id="callboard" class="callboard" role="status" aria-label="The call board — who holds the stage">
+    <div class="station dark" data-station="forge">
+      <i class="eye"></i><b class="pos">Forge</b>
+      <span class="cue">Promptsmith · Ollama</span><span class="state">dark</span><span class="read"></span>
+    </div>
+    <div class="station dark" data-station="face">
+      <i class="eye"></i><b class="pos">Face Shop</b>
+      <span class="cue">ComfyUI</span><span class="state">dark</span><span class="read"></span>
+    </div>
+    <div class="station dark" data-station="stage">
+      <i class="eye"></i><b class="pos">Stage</b>
+      <span class="cue">Wan2GP</span><span class="state">dark</span><span class="read"></span>
+    </div>
+    <div class="station dark" data-station="foley">
+      <i class="eye"></i><b class="pos">Foley</b>
+      <span class="cue">MMAudio</span><span class="state">dark</span><span class="read"></span>
+    </div>
+    <div class="dimmer">
+      <span class="occ-label">Stage load</span>
+      <div class="track"><i id="occ-fill"></i></div>
+      <span class="occ-read" id="occ-read">— no meter · Face Shop dark</span>
+    </div>
+    <button id="evict" title="Unload every LLM from the GPU">Clear the boards</button>
+  </div>
 
   <nav role="tablist">
     <button role="tab" aria-selected="true" data-tab="forge">Forge</button>
@@ -411,21 +503,58 @@ document.querySelectorAll('nav [role=tab]').forEach(btn => btn.addEventListener(
 }));
 const openTab = name => document.querySelector(`nav [data-tab=${name}]`).click();
 
-/* ---- status lamps ---- */
+/* ---- the callboard (who holds the stage) ---- */
+function stationState(s) {
+  return {
+    forge: !s.forge.up ? 'dark' : s.forge.loaded.length ? 'standby' : 'ready',
+    face:  s.face_shop.up ? 'standby' : 'dark',
+    stage: s.stage_job.state === 'running' ? 'live'
+         : s.stage_ui.up ? 'held' : 'dark',   // held, not green — a held stage refuses every cue
+    foley: !s.foley.installed ? 'dark'
+         : s.foley.job_state === 'running' ? 'live' : 'ready',
+  };
+}
+function paintStation(name, state, read) {
+  const el = document.querySelector(`.station[data-station=${name}]`);
+  el.className = 'station ' + state;
+  el.querySelector('.state').textContent =
+    state === 'standby' && name === 'face' ? 'warm' : state === 'live' ? 'LIVE' : state;
+  el.querySelector('.read').textContent = read || '';
+}
 async function poll() {
+  const board = $('callboard');
   try {
     const s = await api('/api/status');
-    setLamp('lamp-forge', !s.forge.up ? '' : s.forge.loaded.length ? 'go' : 'standby');
-    setLamp('lamp-face', s.face_shop.up ? 'go' : '');
-    setLamp('lamp-stage', s.stage_job.state === 'running' ? 'live' : (s.stage_ui.up ? 'go' : ''));
-    $('vram').textContent = s.face_shop.up ? `${s.face_shop.vram_free_gb} / ${s.face_shop.vram_total_gb} GB free`
-      : s.forge.loaded?.length ? s.forge.loaded.map(m => `${m.model} ${m.size_gb} GB`).join(' · ') : '';
-  } catch { ['lamp-forge','lamp-face','lamp-stage'].forEach(l => setLamp(l, '')); }
+    board.classList.remove('cold');
+    const st = stationState(s);
+    paintStation('forge', st.forge, st.forge === 'standby'
+      ? s.forge.loaded.map(m => `${m.model} ${m.size_gb} GB`).join(' · ') : '');
+    paintStation('face', st.face, '');
+    paintStation('stage', st.stage, st.stage === 'live' ? (s.stage_job.model || 'mid-take')
+      : st.stage === 'held' ? 'the full UI holds :7860' : '');
+    paintStation('foley', st.foley, st.foley === 'live' ? 'scoring' : '');
+    document.body.classList.toggle('take-running', Object.values(st).includes('live'));
+    if (s.face_shop.up) {
+      const {vram_free_gb: free, vram_total_gb: total} = s.face_shop;
+      $('occ-fill').style.width = `${Math.max(0, Math.min(100, (1 - free / total) * 100))}%`;
+      $('occ-read').textContent = `${free} / ${total} GB free`;
+    } else {
+      // no invented numbers — the only VRAM truth the poll carries is the Face Shop's
+      $('occ-fill').style.width = '0';
+      $('occ-read').textContent = '— no meter · Face Shop dark';
+    }
+  } catch {
+    board.classList.add('cold');
+    document.body.classList.remove('take-running');
+    ['forge', 'face', 'stage', 'foley'].forEach(n => paintStation(n, 'dark', ''));
+    $('occ-fill').style.width = '0';
+    $('occ-read').textContent = '—';
+  }
 }
-const setLamp = (id, cls) => { $(id).className = 'lamp' + (cls ? ' ' + cls : ''); };
 poll(); setInterval(poll, 5000);
 $('evict').addEventListener('click', async () => {
-  const btn = $('evict');
+  const btn = $('evict'), board = $('callboard');
+  board.classList.add('blackout');   // lamps cool to dark L→R — the master switch thrown
   try {
     const {evicted} = await api('/api/evict', {});
     btn.textContent = evicted.length
@@ -433,7 +562,7 @@ $('evict').addEventListener('click', async () => {
       : 'The boards were already clear';
   } catch { btn.textContent = 'The booth is not answering'; }
   setTimeout(() => { btn.textContent = 'Clear the boards'; }, 2600);
-  poll();
+  setTimeout(() => { board.classList.remove('blackout'); poll(); }, 1200);
 });
 
 /* ---- forge ---- */
@@ -662,27 +791,27 @@ $('stage-go').addEventListener('click', async () => {
     watchStage();
   } catch (e) { showError('stage-error', e); }
 });
-function stageMediaHTML(f, cap) {
-  const url = '/stage-output/' + encodeURIComponent(f);
-  return /\.(png|jpe?g|webp)$/i.test(f)
-    ? `<img src="${url}" alt="${f}">
-       <span class="cap">${cap}
-         <button class="cast" data-cast="${encodeURIComponent(f)}">Cast as a lead →</button></span>`
-    : `<video controls loop src="${url}"></video>
-       <span class="cap">${cap}
-         <button class="cast" data-score="${encodeURIComponent(f)}">Score it in the foley booth →</button></span>`;
-}
-function bindStageActions() {
-  $('stage-result').querySelectorAll('[data-score]').forEach(b => b.addEventListener('click', async () => {
-    await loadFoleySources('stage:' + decodeURIComponent(b.dataset.score));
-    openTab('foley');
-  }));
-  $('stage-result').querySelectorAll('[data-cast]').forEach(b => b.addEventListener('click', async () => {
-    const {cast} = await api('/api/stage/cast', {image: decodeURIComponent(b.dataset.cast), from: 'stage'});
-    forgeLead = cast;
-    await loadFootage(cast);
-    b.textContent = 'Cast — it is in the footage now';
-  }));
+function mountStageTake(f, job) {
+  const isImage = /\.(png|jpe?g|webp)$/i.test(f);
+  mountTake($('stage-result'), {
+    room: 'stage',
+    url: '/stage-output/' + encodeURIComponent(f),
+    kind: isImage ? 'image' : 'video',
+    title: f,
+    meta: {model: job.model, seed: job.seed,
+           loras: (job.loras || []).map(l => l.replace(/\.safetensors$/i, ''))},
+    acts: isImage
+      ? [['Cast as a lead →', async b => {
+          const {cast} = await api('/api/stage/cast', {image: f, from: 'stage'});
+          forgeLead = cast;
+          await loadFootage(cast);
+          b.textContent = 'Cast — it is in the footage now';
+        }]]
+      : [['Score it in the foley booth →', async () => {
+          await loadFoleySources('stage:' + f);
+          openTab('foley');
+        }]],
+  });
 }
 function watchStage() {
   clearInterval(stagePoller);
@@ -700,11 +829,8 @@ function watchStage() {
     if (job.state === 'running') return;
     clearInterval(stagePoller);
     if (job.state === 'done') {
-      const who = (job.model ? ' · ' + job.model : '')
-        + (job.loras?.length ? ' · wearing ' + job.loras.map(l => l.replace(/\.safetensors$/i, '')).join(', ') : '');
-      $('stage-result').innerHTML = (job.outputs || [])
-        .map(f => stageMediaHTML(f, `${f} · seed ${job.seed}${who}`)).join('');
-      bindStageActions();
+      $('stage-result').innerHTML = '';
+      (job.outputs || []).forEach(f => mountStageTake(f, job));
       loadArchive();
     } else if (job.state === 'failed') {
       showError('stage-error', {message: `The take collapsed (exit ${job.exit_code}). The last lines of the log above tell you where — fix the cue and call it again.`});
@@ -722,28 +848,32 @@ function pickFaceSitter(name) {
   // In edit mode the output follows the sitter's dimensions (~1 MP).
   $('face-w').disabled = $('face-h').disabled = !!faceSitter;
 }
-function showPaintings(files) {
+function showPaintings(files, cue) {
   $('face-result').innerHTML = '';
   files.forEach(f => {
-    const img = document.createElement('img');
-    img.src = '/face-output/' + encodeURIComponent(f); img.alt = f;
-    const cap = document.createElement('span'); cap.className = 'cap';
-    cap.textContent = f + ' ';
-    const send = document.createElement('button'); send.className = 'cast'; send.textContent = 'Send to the stage →';
-    send.addEventListener('click', async () => {
-      const {cast} = await api('/api/stage/cast', {image: f});
-      forgeLead = cast;  // the new lead is also what the Promptsmith should look at
-      await loadFootage(cast);
-      if (img.naturalWidth) matchResolution(img.naturalWidth, img.naturalHeight);
-      openTab('stage');
+    mountTake($('face-result'), {
+      room: 'face',
+      url: '/face-output/' + encodeURIComponent(f),
+      kind: 'image',
+      title: cue.prompt || f,
+      meta: {model: cue.model, seed: cue.seed},
+      acts: [['Send to the stage →', async b => {
+        const {cast} = await api('/api/stage/cast', {image: f});
+        forgeLead = cast;  // the new lead is also what the Promptsmith should look at
+        await loadFootage(cast);
+        const img = b.closest('.mount').querySelector('img');
+        if (img?.naturalWidth) matchResolution(img.naturalWidth, img.naturalHeight);
+        openTab('stage');
+      }]],
     });
-    cap.appendChild(send);
-    $('face-result').append(img, cap);
   });
 }
 $('face-go').addEventListener('click', async () => {
   clearError('face-error');
   $('face-go').disabled = true;
+  // the recipe as cued — captured now, so the mount stays truthful if the form changes mid-paint
+  const cue = {prompt: $('face-prompt').value.trim(), seed: +$('face-seed').value,
+               model: ($('face-model').value || '').replace(/\.(gguf|safetensors)$/i, '')};
   try {
     const {prompt_id} = await api('/api/face/generate', {
       prompt: $('face-prompt').value, width: +$('face-w').value, height: +$('face-h').value, seed: +$('face-seed').value,
@@ -762,7 +892,7 @@ $('face-go').addEventListener('click', async () => {
       if (r.state === 'painting') return;
       clearInterval(timer); $('face-go').disabled = false;
       if (r.state === 'done') {
-        showPaintings(r.images);
+        showPaintings(r.images, cue);
         loadArchive();
       } else {
         $('face-result').innerHTML = '';
@@ -803,7 +933,7 @@ function archItems() {
                && (!q || (it.name + ' ' + JSON.stringify(it.meta || {})).toLowerCase().includes(q)))
     .sort((a, b) => b.mtime - a.mtime);
 }
-function canisterChips(it) {
+function canisterChips(it, {fresh} = {}) {
   const m = it.meta || {};
   const chips = [[ROOMS[it.room].label, 'chip room']];
   if (m.model) chips.push([m.model, 'chip']);
@@ -814,9 +944,45 @@ function canisterChips(it) {
   if (m.frames) chips.push([`${m.frames} fr`, 'chip']);
   if (m.duration_s) chips.push([`${m.duration_s}s`, 'chip']);
   (m.loras || []).forEach(l => chips.push([`+ ${l}`, 'chip']));
-  chips.push([age(it.mtime), 'chip']);
-  if (it.size) chips.push([`${(it.size / 1048576).toFixed(1)} MB`, 'chip']);
+  if (!fresh) {
+    // a fresh take wears the Fresh stamp instead of an age chip — same DNA, different moment
+    chips.push([age(it.mtime), 'chip']);
+    if (it.size) chips.push([`${(it.size / 1048576).toFixed(1)} MB`, 'chip']);
+  }
   return chips;
+}
+
+/* ---- the stamped mount ("The Print") — fresh takes, all rooms ---- */
+function mountTake(host, {room, url, kind, title, meta, acts = []}) {
+  const fig = document.createElement('figure');
+  fig.className = 'mount'; fig.dataset.room = room;
+  const frame = document.createElement('div'); frame.className = 'mount-frame';
+  const media = document.createElement(kind === 'image' ? 'img' : kind === 'audio' ? 'audio' : 'video');
+  media.src = url;
+  if (kind === 'video') { media.controls = true; media.loop = true; }
+  else if (kind === 'audio') media.controls = true;
+  else media.alt = title;
+  const stamp = document.createElement('span'); stamp.className = 'mount-stamp'; stamp.textContent = 'Fresh';
+  frame.append(media, stamp);
+  const body = document.createElement('figcaption'); body.className = 'mount-body';
+  const t = document.createElement('p'); t.className = 'mount-title'; t.textContent = title;
+  const chips = document.createElement('div'); chips.className = 'mount-chips';
+  canisterChips({room, meta}, {fresh: true}).forEach(([text, cls]) => {
+    const c = document.createElement('span'); c.className = cls; c.textContent = text;
+    chips.appendChild(c);
+  });
+  body.append(t, chips);
+  if (acts.length) {
+    const row = document.createElement('div'); row.className = 'mount-acts';
+    acts.forEach(([label, fn]) => {
+      const b = document.createElement('button'); b.className = 'act'; b.textContent = label;
+      b.addEventListener('click', () => fn(b));
+      row.appendChild(b);
+    });
+    body.appendChild(row);
+  }
+  fig.append(frame, body);
+  host.appendChild(fig);
 }
 function renderArchive() {
   const items = archItems();
@@ -964,11 +1130,14 @@ function watchFoley() {
     clearInterval(foleyPoller);
     if (job.state === 'done') {
       loadArchive();
-      $('foley-result').innerHTML = (job.outputs || []).map(f => f.endsWith('.mp4')
-        ? `<video controls loop src="/foley-output/${encodeURIComponent(f)}"></video>
-           <span class="cap">${f} · seed ${job.seed} · the composite — sound on the frames</span>`
-        : `<audio controls src="/foley-output/${encodeURIComponent(f)}"></audio>
-           <span class="cap">${f} · seed ${job.seed}</span>`).join('');
+      $('foley-result').innerHTML = '';
+      (job.outputs || []).forEach(f => mountTake($('foley-result'), {
+        room: 'foley',
+        url: '/foley-output/' + encodeURIComponent(f),
+        kind: f.endsWith('.mp4') ? 'video' : 'audio',
+        title: f.endsWith('.mp4') ? `${f} — the composite: sound on the frames` : f,
+        meta: {seed: job.seed},
+      }));
     } else if (job.state === 'failed') {
       showError('foley-error', {message: `The score collapsed (exit ${job.exit_code}). The log above names the broken instrument — first cold run downloads the weights, give that one time.`});
     }
