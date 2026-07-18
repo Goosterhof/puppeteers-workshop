@@ -165,6 +165,20 @@ pipeline (stdlib Python, `prompter-box/`, no venv):
   steps at guidance 1. Ratified 2026-07-18: 5B + FastWan, 8 steps @
   guidance 1, 41 frames 720p in 42.8 s. Per-cue settings JSONs
   (`jobs/prompter-*.json`) are take artifacts, gitignored.
+- **Image → image, both rooms** (2026-07-18, both ratified live) — the
+  Face Shop takes an optional **sitter**: with one picked the painter
+  EDITS via the archive's own night-crier recipe (ReferenceLatent on
+  both conditionings, source scaled to ~1 MP, output follows its dims;
+  the booth copies the sitter into `ComfyUI/input/` because LoadImage
+  only reads there). The Stage's image performers (Krea 2) take an
+  optional lead + a **Strength** knob: Wan2GP img2img is `image_mode 2`
+  + `video_prompt_type "VG"` + `image_guide` + `denoising_strength` +
+  `model_mode 0`. Two traps, learned at ratification cost: the letter
+  grammar honors `denoising_strength` only with **"G"** (plain "V"
+  forces 1.0), and a settings JSON **without `settings_version`** is
+  treated as ancient — `fix_settings` rewrites `video_prompt_type` to
+  the model's inpaint default whose "A" then demands a mask. The booth
+  stamps `settings_version: 2.66` on every cue.
 - **The Canisters** (2026-07-18) — the dedicated archive tab. Every
   previous take, painting, and score served straight off the output dirs
   (`/api/archive`, newest first, 150 per room) as **labeled cards**: the

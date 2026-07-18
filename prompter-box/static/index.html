@@ -289,6 +289,7 @@
             <option>704x1280</option><option>480x832</option><option>1280x704</option><option>832x480</option>
           </select></div>
         <div id="stage-len-wrap"><label class="field" for="stage-len">Frames</label><input id="stage-len" type="number" value="41" min="9" step="4"></div>
+        <div id="stage-strength-wrap" hidden><label class="field" for="stage-strength">Strength</label><input id="stage-strength" type="number" value="0.6" min="0.05" max="1" step="0.05"></div>
         <div><label class="field" for="stage-steps">Steps</label><input id="stage-steps" type="number" value="4" min="1" max="100"></div>
         <div><label class="field" for="stage-guidance">Guidance</label><input id="stage-guidance" type="number" value="1" min="0" step="0.5"></div>
         <div><label class="field" for="stage-seed">Seed</label><input id="stage-seed" type="number" value="7"></div>
@@ -308,13 +309,15 @@
       <select id="face-model"></select>
       <label class="field" for="face-prompt">The cue</label>
       <textarea id="face-prompt"></textarea>
+      <label class="field">The sitter — optional: an image to EDIT; the cue then describes the change (click to pick, click again to clear)</label>
+      <div id="face-thumbs" class="thumbrow"></div>
       <div class="row" style="margin-top:14px">
         <div><label class="field" for="face-w">Width</label><input id="face-w" type="number" value="768" step="16"></div>
         <div><label class="field" for="face-h">Height</label><input id="face-h" type="number" value="1024" step="16"></div>
         <div><label class="field" for="face-seed">Seed</label><input id="face-seed" type="number" value="7"></div>
         <div><button class="fire" id="face-go" style="margin-top:0">Cue the face shop</button></div>
       </div>
-      <p class="note">The house painter is Flux 2 Klein 9B, 4-step distilled — a take lands in seconds once warm. The qwen3 text encoder and flux2 VAE are bolted to the easel, so only Flux 2 family painters will pair; drop new ones in <code>ComfyUI/models/diffusion_models/</code> and they appear here. (Krea 2 paints via the Stage — it is a Wan2GP performer.)</p>
+      <p class="note">The house painter is Flux 2 Klein 9B, 4-step distilled — a take lands in seconds once warm. With a sitter picked the painter EDITS instead of painting fresh (the night-crier ReferenceLatent recipe): the cue describes the change — "repaint him as…", "replace the background with…", "swap the woman into…" — and width/height follow the sitter. The qwen3 text encoder and flux2 VAE are bolted to the easel, so only Flux 2 family painters will pair; drop new ones in <code>ComfyUI/models/diffusion_models/</code> and they appear here. (Krea 2 paints via the Stage — pick it a lead and it repaints at the strength knob.)</p>
       <p class="error" id="face-error" hidden></p>
       <div class="result" id="face-result"></div>
     </div>
@@ -525,13 +528,13 @@ function applyPerformer() {
   if (!m) return;
   const isImage = m.kind === 't2i';
   $('stage-len-wrap').hidden = isImage;
+  $('stage-strength-wrap').hidden = !isImage;
   $('stage-guide-row').hidden = m.kind !== 'swap';
-  $('thumbs').style.display = isImage ? 'none' : '';
   $('stage-lead-label').textContent = {
     i2v: 'The lead — start image (footage/)',
     t2v: 'The lead — optional: hand it a start image, or let it work from text alone',
     swap: 'The lead — the character to animate (footage/)',
-    t2i: 'The lead — not used: this performer paints from text alone',
+    t2i: 'The lead — optional: pick a source to repaint (img2img at the strength below), or paint from text alone',
   }[m.kind] || 'The lead';
   const presets = isImage ? RES_PRESETS.image : RES_PRESETS.video;
   const options = presets.includes(m.resolution) ? presets : [m.resolution, ...presets];
@@ -584,9 +587,9 @@ async function loadStageGuides() {
   const keep = sel.value;
   fillReelSelect(sel, await api('/api/foley/sources'), '— pick the choreography —', keep);
 }
-function pickThumb(name) {
-  pickedImage = name;
-  $('thumbs').querySelectorAll('img').forEach(t => t.classList.toggle('picked', t.title === name));
+function pickThumb(name, toggle) {
+  pickedImage = (toggle && pickedImage === name) ? null : name;
+  $('thumbs').querySelectorAll('img').forEach(t => t.classList.toggle('picked', t.title === pickedImage));
 }
 function pickForgeLead(name) {
   forgeLead = forgeLead === name ? null : name;
@@ -594,9 +597,11 @@ function pickForgeLead(name) {
 }
 async function loadFootage(preselect) {
   const {images} = await api('/api/footage');
-  $('thumbs').innerHTML = ''; $('forge-thumbs').innerHTML = '';
+  $('thumbs').innerHTML = ''; $('forge-thumbs').innerHTML = ''; $('face-thumbs').innerHTML = '';
   images.forEach(name => {
-    for (const [host, onpick, current] of [['thumbs', pickThumb, pickedImage], ['forge-thumbs', pickForgeLead, forgeLead]]) {
+    for (const [host, onpick, current] of [['thumbs', n => pickThumb(n, true), pickedImage],
+                                           ['forge-thumbs', pickForgeLead, forgeLead],
+                                           ['face-thumbs', pickFaceSitter, faceSitter]]) {
       const img = document.createElement('img');
       img.src = '/footage/' + encodeURIComponent(name); img.title = name; img.alt = name;
       if (name === current) img.classList.add('picked');
@@ -630,8 +635,9 @@ $('stage-go').addEventListener('click', async () => {
     await api('/api/stage/generate', {
       model_type: m.type,
       prompt: $('stage-prompt').value,
-      image: m.kind === 't2i' ? '' : (pickedImage || ''),
+      image: pickedImage || '',
       video_guide: m.kind === 'swap' ? $('stage-guide').value : undefined,
+      strength: m.kind === 't2i' ? +$('stage-strength').value : undefined,
       resolution: $('stage-res').value, video_length: +$('stage-len').value, seed: +$('stage-seed').value,
       steps: +$('stage-steps').value || undefined, guidance: +$('stage-guidance').value,
       loras, lora_multipliers: mults,
@@ -686,6 +692,13 @@ function watchStage() {
 api('/api/stage/job').then(j => { if (j.state === 'running') { $('stage-log').hidden = false; watchStage(); } });
 
 /* ---- face shop ---- */
+let faceSitter = null;
+function pickFaceSitter(name) {
+  faceSitter = faceSitter === name ? null : name;
+  $('face-thumbs').querySelectorAll('img').forEach(t => t.classList.toggle('picked', t.title === faceSitter));
+  // In edit mode the output follows the sitter's dimensions (~1 MP).
+  $('face-w').disabled = $('face-h').disabled = !!faceSitter;
+}
 function showPaintings(files) {
   $('face-result').innerHTML = '';
   files.forEach(f => {
@@ -711,7 +724,7 @@ $('face-go').addEventListener('click', async () => {
   try {
     const {prompt_id} = await api('/api/face/generate', {
       prompt: $('face-prompt').value, width: +$('face-w').value, height: +$('face-h').value, seed: +$('face-seed').value,
-      model: $('face-model').value || undefined,
+      model: $('face-model').value || undefined, source: faceSitter || undefined,
     });
     $('face-result').innerHTML = '<span class="cap">Painting…</span>';
     const timer = setInterval(async () => {

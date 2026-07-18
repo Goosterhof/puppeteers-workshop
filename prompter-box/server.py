@@ -39,6 +39,7 @@ WAN_SETTINGS = WAN_DIR / "settings"
 WAN_CKPTS = WAN_DIR / "ckpts"
 WAN_LORAS = WAN_DIR / "loras"
 COMFY_OUT = BASE / "ComfyUI" / "output"
+COMFY_IN = BASE / "ComfyUI" / "input"
 COMFY_PAINTERS = BASE / "ComfyUI" / "models" / "diffusion_models"
 MM_DIR = BASE / "MMAudio"
 MM_PY = MM_DIR / ".venv" / "bin" / "python"
@@ -329,6 +330,46 @@ def klein_graph(prompt, width, height, seed, steps, prefix="PrompterBox", painte
         "11": {"class_type": "SamplerCustomAdvanced", "inputs": {"noise": ["9", 0], "guider": ["6", 0], "sampler": ["7", 0], "sigmas": ["8", 0], "latent_image": ["10", 0]}},
         "12": {"class_type": "VAEDecode", "inputs": {"samples": ["11", 0], "vae": ["3", 0]}},
         "13": {"class_type": "SaveImage", "inputs": {"images": ["12", 0], "filename_prefix": prefix}},
+    }
+
+
+def klein_edit_graph(prompt, seed, steps, prefix, painter, source_name):
+    """Image editing — the arc-proven ReferenceLatent recipe (the same graph
+    that repainted the night crier, recovered from the archive's own PNG
+    labels). The source is scaled to ~1 MP and the output follows its
+    dimensions; the cue describes the change, not the whole picture."""
+    loader = (
+        {"class_type": "UnetLoaderGGUF", "inputs": {"unet_name": painter}}
+        if painter.lower().endswith(".gguf")
+        else {"class_type": "UNETLoader", "inputs": {"unet_name": painter, "weight_dtype": "default"}}
+    )
+    return {
+        "load": {"class_type": "LoadImage", "inputs": {"image": source_name}},
+        "scale": {"class_type": "ImageScaleToTotalPixels",
+                  "inputs": {"image": ["load", 0], "upscale_method": "nearest-exact",
+                             "megapixels": 1.0, "resolution_steps": 1}},
+        "size": {"class_type": "GetImageSize", "inputs": {"image": ["scale", 0]}},
+        "unet": loader,
+        "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen_3_8b_fp8mixed.safetensors", "type": "flux2"}},
+        "vae": {"class_type": "VAELoader", "inputs": {"vae_name": "flux2-vae.safetensors"}},
+        "pos": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["clip", 0]}},
+        "neg0": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["pos", 0]}},
+        "venc": {"class_type": "VAEEncode", "inputs": {"pixels": ["scale", 0], "vae": ["vae", 0]}},
+        "refpos": {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["pos", 0], "latent": ["venc", 0]}},
+        "refneg": {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["neg0", 0], "latent": ["venc", 0]}},
+        "guider": {"class_type": "CFGGuider",
+                   "inputs": {"model": ["unet", 0], "positive": ["refpos", 0], "negative": ["refneg", 0], "cfg": 1.0}},
+        "noise": {"class_type": "RandomNoise", "inputs": {"noise_seed": seed}},
+        "sampler": {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}},
+        "sched": {"class_type": "Flux2Scheduler",
+                  "inputs": {"steps": steps, "width": ["size", 0], "height": ["size", 1]}},
+        "latent": {"class_type": "EmptyFlux2LatentImage",
+                   "inputs": {"width": ["size", 0], "height": ["size", 1], "batch_size": 1}},
+        "samp": {"class_type": "SamplerCustomAdvanced",
+                 "inputs": {"noise": ["noise", 0], "guider": ["guider", 0], "sampler": ["sampler", 0],
+                            "sigmas": ["sched", 0], "latent_image": ["latent", 0]}},
+        "dec": {"class_type": "VAEDecode", "inputs": {"samples": ["samp", 0], "vae": ["vae", 0]}},
+        "save": {"class_type": "SaveImage", "inputs": {"images": ["dec", 0], "filename_prefix": prefix}},
     }
 
 
@@ -697,6 +738,11 @@ class Handler(BaseHTTPRequestHandler):
         if painter not in face_painters():
             return self.fail(f"No painter named '{painter}' hangs in the storeroom — "
                              "check /api/face/models for the roster.", 404)
+        source = None
+        if (sitter := (p.get("source") or "").strip()):
+            source = (FOOTAGE / sitter).resolve()
+            if not source.is_relative_to(FOOTAGE.resolve()) or not source.is_file():
+                return self.fail(f"'{sitter}' is not in the footage archive.", 404)
         if stage_job.get("state") == "running":
             return self.fail("The Stage is mid-performance — the GPU cannot serve two masters. "
                              "Wait for the take to finish.", 409)
@@ -706,9 +752,19 @@ class Handler(BaseHTTPRequestHandler):
         # take looks failed. A fresh prefix forces SaveImage to run (instant, cached
         # tensor) so every cue lands an image.
         stamp = datetime.now().strftime("%H%M%S")
-        graph = klein_graph(prompt, int(p.get("width", 768)), int(p.get("height", 1024)),
-                            int(p.get("seed", int(time.time()) % 2**31)), int(p.get("steps", 4)),
-                            prefix=f"PrompterBox-{stamp}", painter=painter)
+        seed = int(p.get("seed", int(time.time()) % 2**31))
+        steps = int(p.get("steps", 4))
+        if source:
+            # LoadImage reads from ComfyUI's input room — hand the sitter in.
+            sitter_name = f"prompter-src-{stamp}{source.suffix.lower()}"
+            COMFY_IN.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, COMFY_IN / sitter_name)
+            graph = klein_edit_graph(prompt, seed, steps,
+                                     prefix=f"PrompterBox-{stamp}", painter=painter,
+                                     source_name=sitter_name)
+        else:
+            graph = klein_graph(prompt, int(p.get("width", 768)), int(p.get("height", 1024)),
+                                seed, steps, prefix=f"PrompterBox-{stamp}", painter=painter)
         try:
             res = http_json(f"{COMFY}/prompt", {"prompt": graph}, timeout=15)
         except OSError:
@@ -798,6 +854,10 @@ class Handler(BaseHTTPRequestHandler):
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             settings = dict(performer["recipe"])
             settings.update({
+                # Without a current settings_version, wgp's fix_settings treats
+                # the cue as ancient and rewrites video_prompt_type to the
+                # model's inpaint default (whose "A" then demands a mask).
+                "settings_version": 2.66,
                 "model_type": model_type,
                 "prompt": prompt,
                 "resolution": p.get("resolution") or performer["resolution"],
@@ -816,7 +876,22 @@ class Handler(BaseHTTPRequestHandler):
                 mults = [str(float(m)) if str(m).strip() else "1.0"
                          for m in (list(multipliers) + ["1.0"] * len(loras))[:len(loras)]]
                 settings["loras_multipliers"] = " ".join(mults)
-            if start:
+            if kind == "t2i" and start:
+                # Image performers repaint: Control Image + denoising strength
+                # below 1 is Wan2GP's img2img — the letter grammar demands
+                # "VG" ("G" honors denoising_strength; without it wgp forces
+                # 1.0), and ONLY model_mode 0 keeps the strength (the lanpaint
+                # inpainting modes silently reset it — see
+                # krea2_handler.normalize_lanpaint_strengths).
+                settings.update({
+                    "image_mode": 2,
+                    "video_prompt_type": "VG",
+                    "image_guide": str(start),
+                    "denoising_strength": max(0.05, min(1.0, float(p.get("strength", 0.6)))),
+                    "model_mode": 0,
+                    "masking_strength": 1.0,
+                })
+            elif start:
                 settings["image_start"] = str(start)
                 settings["image_prompt_type"] = "S"
             elif kind == "t2v":
