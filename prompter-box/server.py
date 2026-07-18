@@ -499,7 +499,7 @@ class Handler(BaseHTTPRequestHandler):
         The booth itself is stateless between page loads; the racks let the
         UI show history straight from the filesystem, newest first.
         """
-        def rack(root, exts, recurse=False, limit=48):
+        def rack(root, exts, recurse=False, limit=150):
             if not root.exists():
                 return []
             items = []

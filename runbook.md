@@ -165,11 +165,16 @@ pipeline (stdlib Python, `prompter-box/`, no venv):
   steps at guidance 1. Ratified 2026-07-18: 5B + FastWan, 8 steps @
   guidance 1, 41 frames 720p in 42.8 s. Per-cue settings JSONs
   (`jobs/prompter-*.json`) are take artifacts, gitignored.
-  Every panel ends in **the rack** (2026-07-18): an archive strip of
-  previous takes/paintings/scores served straight off the output dirs
-  (`/api/archive`, newest first) — click any to reload it into the
-  result panel with its cast/score buttons live. The booth no longer
-  forgets your work on page reload.
+- **The Canisters** (2026-07-18) — the dedicated archive tab. Every
+  previous take, painting, and score served straight off the output dirs
+  (`/api/archive`, newest first, 150 per room), in one filterable
+  gallery: search box (filename carries prompt slug + seed), room pills
+  (Stage / Face Shop / Foley), kind pills (reels / stills / audio).
+  Click a canister to mount it in the viewer with its actions live —
+  stage reels get "Score it in the foley booth", stage stills "Cast as a
+  lead", paintings "Send to the stage". Refreshes on tab entry and after
+  every finished job. (Replaced the short-lived per-panel racks the same
+  day — history lives in its own room, the working panels stay lean.)
 - **Face Shop** — headless text-to-image via the ComfyUI API (needs
   `./start-comfyui.sh` running); result renders inline in seconds. A
   **painter dropdown** (2026-07-18) enumerates `ComfyUI/models/
