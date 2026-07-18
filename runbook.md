@@ -154,7 +154,15 @@ pipeline (stdlib Python, `prompter-box/`, no venv):
   boards — no frames, stills land with **"Cast as a lead →"** to feed them
   back into `footage/`). Settings JSONs land in `jobs/prompter-*.json`, logs
   in `jobs/logs/`. Drop new weights into `ckpts/` and they appear on the
-  playbill without touching the booth.
+  playbill without touching the booth. Each performer also carries a
+  **LoRA wardrobe** (2026-07-18): the playbill lists the safetensors on
+  that performer's shelf — dir mapping mirrors the family handlers
+  (`i2v_2_2` family → `loras/wan`, 5B → `loras/wan_5B`, SCAIL-2 →
+  `loras/wan_i2v`, Krea 2 → `loras/krea2`) — click to don, set a strength
+  per garment (`activated_loras` + space-joined `loras_multipliers` in the
+  settings JSON). **Steps** and **guidance** knobs prefill from each
+  recipe and override per cue — accelerator LoRAs (FastWan) want few
+  steps at guidance 1.
 - **Face Shop** — headless text-to-image via the ComfyUI API (needs
   `./start-comfyui.sh` running); result renders inline in seconds. A
   **painter dropdown** (2026-07-18) enumerates `ComfyUI/models/

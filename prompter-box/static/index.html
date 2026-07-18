@@ -134,6 +134,16 @@
   .card .acts button:hover { border-color: var(--ink); color: var(--ink); }
 
   /* ---- stage / face ---- */
+  .lorarack { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+  .lorarack .garment { display: flex; align-items: center; gap: 6px; }
+  .lorarack .garment button {
+    background: var(--booth); border: 1px solid var(--drape-edge); color: var(--dim);
+    font: 12px var(--typed); padding: 7px 12px; cursor: pointer; border-radius: 2px;
+    max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .lorarack .garment button[aria-pressed="true"] { border-color: var(--lamp); color: var(--lamp); }
+  .lorarack .garment input { width: 64px; padding: 6px 6px; }
+  .lorarack .garment input:disabled { opacity: .35; }
   .thumbrow { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
   .thumbrow img {
     height: 86px; border: 2px solid transparent; border-radius: 2px; cursor: pointer;
@@ -244,12 +254,19 @@
         <label class="field" for="stage-guide">The choreography — the driving video whose motion the character re-performs</label>
         <select id="stage-guide"><option value="">— pick the choreography —</option></select>
       </div>
+      <div id="stage-lora-row" hidden>
+        <label class="field">The wardrobe — LoRAs on this performer's shelf (click to don, then set the strength)</label>
+        <div id="stage-loras" class="lorarack"></div>
+        <p class="note" id="stage-lora-note">Accelerator LoRAs (FastWan and kin) usually want few steps and guidance 1 — the knobs below are yours.</p>
+      </div>
       <div class="row" style="margin-top:14px">
         <div><label class="field" for="stage-res">Resolution</label>
           <select id="stage-res">
             <option>704x1280</option><option>480x832</option><option>1280x704</option><option>832x480</option>
           </select></div>
         <div id="stage-len-wrap"><label class="field" for="stage-len">Frames</label><input id="stage-len" type="number" value="41" min="9" step="4"></div>
+        <div><label class="field" for="stage-steps">Steps</label><input id="stage-steps" type="number" value="4" min="1" max="100"></div>
+        <div><label class="field" for="stage-guidance">Guidance</label><input id="stage-guidance" type="number" value="1" min="0" step="0.5"></div>
         <div><label class="field" for="stage-seed">Seed</label><input id="stage-seed" type="number" value="7"></div>
         <div><button class="fire" id="stage-go" style="margin-top:0">Cue the stage</button></div>
       </div>
@@ -463,8 +480,44 @@ function applyPerformer() {
   $('stage-res').innerHTML = options.map(r => `<option>${r}</option>`).join('');
   $('stage-res').value = m.resolution;
   if (!isImage) $('stage-len').value = m.video_length;
+  $('stage-steps').value = m.steps;
+  $('stage-guidance').value = m.guidance;
   $('stage-note').textContent = m.note || `${m.name} — enumerated fresh from the workshop floor.`;
+  dressLoraRack(m);
   if (m.kind === 'swap') loadStageGuides();
+}
+function dressLoraRack(m) {
+  const rack = $('stage-loras');
+  rack.innerHTML = '';
+  $('stage-lora-row').hidden = !m.loras.length;
+  m.loras.forEach(name => {
+    const item = document.createElement('div'); item.className = 'garment';
+    const btn = document.createElement('button');
+    btn.textContent = name.replace(/\.safetensors$/i, '');
+    btn.title = name; btn.dataset.lora = name;
+    btn.setAttribute('aria-pressed', 'false');
+    const mult = document.createElement('input');
+    mult.type = 'number'; mult.value = '1.0'; mult.step = '0.05';
+    mult.disabled = true; mult.title = 'strength';
+    btn.addEventListener('click', () => {
+      const on = btn.getAttribute('aria-pressed') !== 'true';
+      btn.setAttribute('aria-pressed', on);
+      mult.disabled = !on;
+    });
+    item.append(btn, mult);
+    rack.appendChild(item);
+  });
+}
+function donnedLoras() {
+  const loras = [], mults = [];
+  $('stage-loras').querySelectorAll('.garment').forEach(g => {
+    const btn = g.querySelector('button');
+    if (btn.getAttribute('aria-pressed') === 'true') {
+      loras.push(btn.dataset.lora);
+      mults.push(+g.querySelector('input').value || 1);
+    }
+  });
+  return {loras, mults};
 }
 $('stage-model').addEventListener('change', applyPerformer);
 loadStageModels();
@@ -515,12 +568,15 @@ $('stage-go').addEventListener('click', async () => {
   if (m.kind === 'swap' && !$('stage-guide').value)
     return showError('stage-error', {message: `${m.name} needs choreography — pick a driving video.`});
   try {
+    const {loras, mults} = donnedLoras();
     await api('/api/stage/generate', {
       model_type: m.type,
       prompt: $('stage-prompt').value,
       image: m.kind === 't2i' ? '' : (pickedImage || ''),
       video_guide: m.kind === 'swap' ? $('stage-guide').value : undefined,
       resolution: $('stage-res').value, video_length: +$('stage-len').value, seed: +$('stage-seed').value,
+      steps: +$('stage-steps').value || undefined, guidance: +$('stage-guidance').value,
+      loras, lora_multipliers: mults,
     });
     $('stage-result').innerHTML = ''; $('stage-log').hidden = false;
     watchStage();
@@ -535,7 +591,8 @@ function watchStage() {
     if (job.state === 'running') return;
     clearInterval(stagePoller);
     if (job.state === 'done') {
-      const who = job.model ? ' · ' + job.model : '';
+      const who = (job.model ? ' · ' + job.model : '')
+        + (job.loras?.length ? ' · wearing ' + job.loras.map(l => l.replace(/\.safetensors$/i, '')).join(', ') : '');
       $('stage-result').innerHTML = (job.outputs || []).map(f => {
         const url = '/stage-output/' + encodeURIComponent(f);
         return /\.(png|jpe?g|webp)$/i.test(f)

@@ -94,6 +94,35 @@ def performer_kind(model_type, arch):
     return "i2v"
 
 
+def lora_shelf(model_type, arch):
+    """Which LoRA drawer this performer dresses from.
+
+    Mirrors the family handlers' get_lora_dir branching (wan_handler.py:143,
+    krea2_handler.py) without importing them — the handlers drag in torch.
+    """
+    a = (arch or model_type or "").lower()
+    for family in ("krea2", "flux", "qwen", "ltxv", "hunyuan"):
+        if a.startswith(family):
+            return WAN_LORAS / family
+    if a in ("ti2v_2_2", "lucy_edit", "kiwi_edit"):
+        return WAN_LORAS / "wan_5B"
+    if "1.3b" in a:
+        return WAN_LORAS / "wan_1.3B"
+    # i2v-class EXCEPT the 2.2 family dresses from wan_i2v; the 2.2 models
+    # (i2v_2_2 and kin) share the base wan drawer with t2v.
+    if ("scail" in a or a in ("i2v", "fun_inp", "flf2v_720p", "fantasy",
+                              "multitalk", "infinitetalk", "animate")):
+        return WAN_LORAS / "wan_i2v"
+    return WAN_LORAS / "wan"
+
+
+def shelf_loras(shelf):
+    try:
+        return sorted(p.name for p in shelf.iterdir() if p.suffix.lower() == ".safetensors")
+    except OSError:
+        return []
+
+
 def stage_playbill():
     """Every Wan2GP model type whose weights are actually on the floor.
 
@@ -139,6 +168,7 @@ def stage_playbill():
                 pass
         largest_gb = max(installed[n] for n in w1 + w2) / 1e9
         kind = performer_kind(f.stem, m.get("architecture"))
+        shelf = lora_shelf(f.stem, m.get("architecture"))
         playbill.append({
             "type": f.stem,
             "name": m.get("name") or f.stem,
@@ -148,6 +178,10 @@ def stage_playbill():
             "vram_gb": 26 if largest_gb >= 10 else 18 if largest_gb >= 6 else 12,
             "resolution": recipe.get("resolution") or ("1024x1024" if kind == "t2i" else "704x1280"),
             "video_length": recipe.get("video_length", 41),
+            "steps": recipe.get("num_inference_steps", 30),
+            "guidance": recipe.get("guidance_scale", 5),
+            "loras": shelf_loras(shelf),
+            "lora_shelf": shelf.name,
             "note": PERFORMER_NOTES.get(f.stem, ""),
             "recipe": recipe,
         })
@@ -608,6 +642,11 @@ class Handler(BaseHTTPRequestHandler):
             if not guide:
                 return self.fail(f"{performer['name']} is a motion-transfer performer — it needs "
                                  "a driving video (the choreography) alongside the lead.")
+        loras = [str(l).strip() for l in (p.get("loras") or []) if str(l).strip()]
+        if (missing := [l for l in loras if l not in performer["loras"]]):
+            return self.fail(f"Not in {performer['name']}'s wardrobe (loras/{performer['lora_shelf']}/): "
+                             f"{', '.join(missing)}. The playbill lists what hangs there.", 404)
+        multipliers = p.get("lora_multipliers") or []
         if port_open(WAN_UI_PORT):
             return self.fail("The Wan2GP UI is holding the stage on :7860 — two performances "
                              "cannot share the GPU. Close it, then cue again.", 409)
@@ -634,6 +673,17 @@ class Handler(BaseHTTPRequestHandler):
             })
             if kind != "t2i":
                 settings["video_length"] = int(p.get("video_length") or performer["video_length"])
+            if p.get("steps"):
+                settings["num_inference_steps"] = int(p["steps"])
+            if p.get("guidance") is not None:
+                settings["guidance_scale"] = float(p["guidance"])
+            if loras:
+                settings["activated_loras"] = loras
+                # One float per donned LoRA, space-separated — wgp's
+                # parse_loras_multipliers grammar (phase syntax not exposed here).
+                mults = [str(float(m)) if str(m).strip() else "1.0"
+                         for m in (list(multipliers) + ["1.0"] * len(loras))[:len(loras)]]
+                settings["loras_multipliers"] = " ".join(mults)
             if start:
                 settings["image_start"] = str(start)
                 settings["image_prompt_type"] = "S"
@@ -648,7 +698,8 @@ class Handler(BaseHTTPRequestHandler):
             log_path = JOB_LOGS / f"prompter-{stamp}.log"
             stage_job = {"state": "running", "started": datetime.now().isoformat(timespec="seconds"),
                          "settings": settings_path.name, "log": log_path.name, "seed": settings["seed"],
-                         "model": performer["name"], "kind": kind}
+                         "model": performer["name"], "kind": kind,
+                         "loras": loras or None}
             threading.Thread(target=run_stage_job, args=(settings_path, log_path), daemon=True).start()
             self.reply({"state": "running", "settings": settings_path.name, "evicted": evicted})
         finally:
