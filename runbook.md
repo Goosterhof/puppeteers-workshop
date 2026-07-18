@@ -162,7 +162,14 @@ pipeline (stdlib Python, `prompter-box/`, no venv):
   per garment (`activated_loras` + space-joined `loras_multipliers` in the
   settings JSON). **Steps** and **guidance** knobs prefill from each
   recipe and override per cue — accelerator LoRAs (FastWan) want few
-  steps at guidance 1.
+  steps at guidance 1. Ratified 2026-07-18: 5B + FastWan, 8 steps @
+  guidance 1, 41 frames 720p in 42.8 s. Per-cue settings JSONs
+  (`jobs/prompter-*.json`) are take artifacts, gitignored.
+  Every panel ends in **the rack** (2026-07-18): an archive strip of
+  previous takes/paintings/scores served straight off the output dirs
+  (`/api/archive`, newest first) — click any to reload it into the
+  result panel with its cast/score buttons live. The booth no longer
+  forgets your work on page reload.
 - **Face Shop** — headless text-to-image via the ComfyUI API (needs
   `./start-comfyui.sh` running); result renders inline in seconds. A
   **painter dropdown** (2026-07-18) enumerates `ComfyUI/models/

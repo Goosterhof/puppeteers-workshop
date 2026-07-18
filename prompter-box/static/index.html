@@ -145,12 +145,19 @@
   .lorarack .garment input { width: 64px; padding: 6px 6px; }
   .lorarack .garment input:disabled { opacity: .35; }
   .thumbrow { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
-  .thumbrow img {
+  .thumbrow img, .thumbrow video {
     height: 86px; border: 2px solid transparent; border-radius: 2px; cursor: pointer;
     opacity: .75;
   }
-  .thumbrow img:hover { opacity: 1; }
+  .thumbrow img:hover, .thumbrow video:hover { opacity: 1; }
   .thumbrow img.picked { border-color: var(--lamp); opacity: 1; }
+  .reelrack { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; align-items: flex-start; }
+  .reelrack button {
+    background: var(--booth); border: 1px solid var(--drape-edge); color: var(--dim);
+    font: 12px var(--typed); padding: 6px 10px; cursor: pointer; border-radius: 2px;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .reelrack button:hover { border-color: var(--lamp); color: var(--lamp); }
   #forge-thumbs img { height: 62px; }
   #stage-log {
     background: var(--booth); border: 1px solid var(--drape-edge); border-radius: 2px;
@@ -274,6 +281,8 @@
       <p class="error" id="stage-error" hidden></p>
       <div id="stage-log" hidden></div>
       <div class="result" id="stage-result"></div>
+      <label class="field">The rack — previous takes, newest first (click to view)</label>
+      <div id="stage-rack" class="thumbrow"></div>
     </div>
   </section>
 
@@ -293,6 +302,8 @@
       <p class="note">The house painter is Flux 2 Klein 9B, 4-step distilled — a take lands in seconds once warm. The qwen3 text encoder and flux2 VAE are bolted to the easel, so only Flux 2 family painters will pair; drop new ones in <code>ComfyUI/models/diffusion_models/</code> and they appear here. (Krea 2 paints via the Stage — it is a Wan2GP performer.)</p>
       <p class="error" id="face-error" hidden></p>
       <div class="result" id="face-result"></div>
+      <label class="field">The rack — previous paintings, newest first (click to view)</label>
+      <div id="face-rack" class="thumbrow"></div>
     </div>
   </section>
 
@@ -315,6 +326,8 @@
       <p class="error" id="foley-error" hidden></p>
       <div id="foley-log" hidden></div>
       <div class="result" id="foley-result"></div>
+      <label class="field">The rack — previous scores, newest first (click to hear)</label>
+      <div id="foley-rack" class="reelrack"></div>
     </div>
   </section>
 
@@ -582,6 +595,28 @@ $('stage-go').addEventListener('click', async () => {
     watchStage();
   } catch (e) { showError('stage-error', e); }
 });
+function stageMediaHTML(f, cap) {
+  const url = '/stage-output/' + encodeURIComponent(f);
+  return /\.(png|jpe?g|webp)$/i.test(f)
+    ? `<img src="${url}" alt="${f}">
+       <span class="cap">${cap}
+         <button class="cast" data-cast="${encodeURIComponent(f)}">Cast as a lead →</button></span>`
+    : `<video controls loop src="${url}"></video>
+       <span class="cap">${cap}
+         <button class="cast" data-score="${encodeURIComponent(f)}">Score it in the foley booth →</button></span>`;
+}
+function bindStageActions() {
+  $('stage-result').querySelectorAll('[data-score]').forEach(b => b.addEventListener('click', async () => {
+    await loadFoleySources('stage:' + decodeURIComponent(b.dataset.score));
+    openTab('foley');
+  }));
+  $('stage-result').querySelectorAll('[data-cast]').forEach(b => b.addEventListener('click', async () => {
+    const {cast} = await api('/api/stage/cast', {image: decodeURIComponent(b.dataset.cast), from: 'stage'});
+    forgeLead = cast;
+    await loadFootage(cast);
+    b.textContent = 'Cast — it is in the footage now';
+  }));
+}
 function watchStage() {
   clearInterval(stagePoller);
   stagePoller = setInterval(async () => {
@@ -593,26 +628,10 @@ function watchStage() {
     if (job.state === 'done') {
       const who = (job.model ? ' · ' + job.model : '')
         + (job.loras?.length ? ' · wearing ' + job.loras.map(l => l.replace(/\.safetensors$/i, '')).join(', ') : '');
-      $('stage-result').innerHTML = (job.outputs || []).map(f => {
-        const url = '/stage-output/' + encodeURIComponent(f);
-        return /\.(png|jpe?g|webp)$/i.test(f)
-          ? `<img src="${url}" alt="${f}">
-             <span class="cap">${f} · seed ${job.seed}${who}
-               <button class="cast" data-cast="${encodeURIComponent(f)}">Cast as a lead →</button></span>`
-          : `<video controls loop src="${url}"></video>
-             <span class="cap">${f} · seed ${job.seed}${who}
-               <button class="cast" data-score="${encodeURIComponent(f)}">Score it in the foley booth →</button></span>`;
-      }).join('');
-      $('stage-result').querySelectorAll('[data-score]').forEach(b => b.addEventListener('click', async () => {
-        await loadFoleySources('stage:' + decodeURIComponent(b.dataset.score));
-        openTab('foley');
-      }));
-      $('stage-result').querySelectorAll('[data-cast]').forEach(b => b.addEventListener('click', async () => {
-        const {cast} = await api('/api/stage/cast', {image: decodeURIComponent(b.dataset.cast), from: 'stage'});
-        forgeLead = cast;
-        await loadFootage(cast);
-        b.textContent = 'Cast — it is in the footage now';
-      }));
+      $('stage-result').innerHTML = (job.outputs || [])
+        .map(f => stageMediaHTML(f, `${f} · seed ${job.seed}${who}`)).join('');
+      bindStageActions();
+      loadArchive();
     } else if (job.state === 'failed') {
       showError('stage-error', {message: `The take collapsed (exit ${job.exit_code}). The last lines of the log above tell you where — fix the cue and call it again.`});
     }
@@ -622,6 +641,25 @@ function watchStage() {
 api('/api/stage/job').then(j => { if (j.state === 'running') { $('stage-log').hidden = false; watchStage(); } });
 
 /* ---- face shop ---- */
+function showPaintings(files, caps) {
+  $('face-result').innerHTML = '';
+  files.forEach((f, i) => {
+    const img = document.createElement('img');
+    img.src = '/face-output/' + encodeURIComponent(f); img.alt = f;
+    const cap = document.createElement('span'); cap.className = 'cap';
+    cap.textContent = (caps?.[i] || f) + ' ';
+    const send = document.createElement('button'); send.className = 'cast'; send.textContent = 'Send to the stage →';
+    send.addEventListener('click', async () => {
+      const {cast} = await api('/api/stage/cast', {image: f});
+      forgeLead = cast;  // the new lead is also what the Promptsmith should look at
+      await loadFootage(cast);
+      if (img.naturalWidth) matchResolution(img.naturalWidth, img.naturalHeight);
+      openTab('stage');
+    });
+    cap.appendChild(send);
+    $('face-result').append(img, cap);
+  });
+}
 $('face-go').addEventListener('click', async () => {
   clearError('face-error');
   $('face-go').disabled = true;
@@ -636,22 +674,8 @@ $('face-go').addEventListener('click', async () => {
       if (r.state === 'painting') return;
       clearInterval(timer); $('face-go').disabled = false;
       if (r.state === 'done') {
-        $('face-result').innerHTML = '';
-        r.images.forEach(f => {
-          const img = document.createElement('img');
-          img.src = '/face-output/' + encodeURIComponent(f); img.alt = f;
-          const cap = document.createElement('span'); cap.className = 'cap'; cap.textContent = f + ' ';
-          const send = document.createElement('button'); send.className = 'cast'; send.textContent = 'Send to the stage →';
-          send.addEventListener('click', async () => {
-            const {cast} = await api('/api/stage/cast', {image: f});
-            forgeLead = cast;  // the new lead is also what the Promptsmith should look at
-            await loadFootage(cast);
-            if (img.naturalWidth) matchResolution(img.naturalWidth, img.naturalHeight);
-            openTab('stage');
-          });
-          cap.appendChild(send);
-          $('face-result').append(img, cap);
-        });
+        showPaintings(r.images);
+        loadArchive();
       } else {
         $('face-result').innerHTML = '';
         showError('face-error', {message: 'The Face Shop rejected the cue — check the ComfyUI log for the brush that broke.'});
@@ -659,6 +683,56 @@ $('face-go').addEventListener('click', async () => {
     }, 1500);
   } catch (e) { $('face-go').disabled = false; showError('face-error', e); }
 });
+
+/* ---- the racks (archive of previous takes) ---- */
+const age = ts => {
+  const s = Date.now() / 1000 - ts;
+  return s < 90 ? 'just now' : s < 5400 ? Math.round(s / 60) + ' min ago'
+       : s < 172800 ? Math.round(s / 3600) + ' h ago' : Math.round(s / 86400) + ' d ago';
+};
+async function loadArchive() {
+  try {
+    const a = await api('/api/archive');
+    renderRack('stage-rack', a.stage, '/stage-output/', it => {
+      $('stage-result').innerHTML = stageMediaHTML(it.name, `${it.name} · ${age(it.mtime)}`);
+      bindStageActions();
+      $('stage-result').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    });
+    renderRack('face-rack', a.face, '/face-output/', it => {
+      showPaintings([it.name], [`${it.name} · ${age(it.mtime)}`]);
+      $('face-result').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    });
+    renderRack('foley-rack', a.foley, '/foley-output/', it => {
+      const url = '/foley-output/' + encodeURIComponent(it.name);
+      $('foley-result').innerHTML = it.kind === 'video'
+        ? `<video controls loop src="${url}"></video><span class="cap">${it.name} · ${age(it.mtime)}</span>`
+        : `<audio controls src="${url}"></audio><span class="cap">${it.name} · ${age(it.mtime)}</span>`;
+    });
+  } catch { /* racks stay bare — the booth may predate the archive window */ }
+}
+function renderRack(hostId, items, srcPrefix, onpick) {
+  const host = $(hostId);
+  host.innerHTML = '';
+  items.forEach(it => {
+    let el;
+    if (it.kind === 'image') {
+      el = document.createElement('img');
+      el.src = srcPrefix + encodeURIComponent(it.name);
+      el.loading = 'lazy';
+    } else if (it.kind === 'video' && hostId !== 'foley-rack') {
+      el = document.createElement('video');
+      el.src = srcPrefix + encodeURIComponent(it.name);
+      el.muted = true; el.preload = 'metadata';
+    } else {
+      el = document.createElement('button');
+      el.textContent = `${it.name} · ${age(it.mtime)}`;
+    }
+    el.title = `${it.name} · ${age(it.mtime)}`;
+    el.addEventListener('click', () => onpick(it));
+    host.appendChild(el);
+  });
+}
+loadArchive();
 
 /* ---- foley booth ---- */
 let foleyPoller = null;
@@ -706,6 +780,7 @@ function watchFoley() {
     if (job.state === 'running') return;
     clearInterval(foleyPoller);
     if (job.state === 'done') {
+      loadArchive();
       $('foley-result').innerHTML = (job.outputs || []).map(f => f.endsWith('.mp4')
         ? `<video controls loop src="/foley-output/${encodeURIComponent(f)}"></video>
            <span class="cap">${f} · seed ${job.seed} · the composite — sound on the frames</span>`

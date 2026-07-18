@@ -187,6 +187,9 @@ def stage_playbill():
         })
     return playbill
 
+IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp")
+VIDEO_EXTS = (".mp4", ".webm", ".mkv")
+
 stage_lock = threading.Lock()
 stage_job = {"state": "idle"}  # idle | running | done | failed
 
@@ -431,6 +434,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_file(MM_OUT, path[len("/foley-output/"):])
         if path == "/api/status":
             return self.api_status()
+        if path == "/api/archive":
+            return self.api_archive()
         if path == "/api/footage":
             return self.api_footage()
         if path == "/api/stage/job":
@@ -486,6 +491,30 @@ class Handler(BaseHTTPRequestHandler):
             "stage_job": {k: v for k, v in stage_job.items() if k != "pid"},
             "foley": {"installed": MM_PY.exists(),
                       "job_state": foley_job.get("state", "idle")},
+        })
+
+    def api_archive(self):
+        """The racks — every previous take still hanging in the output rooms.
+
+        The booth itself is stateless between page loads; the racks let the
+        UI show history straight from the filesystem, newest first.
+        """
+        def rack(root, exts, recurse=False, limit=48):
+            if not root.exists():
+                return []
+            items = []
+            for p in (root.glob("**/*") if recurse else root.iterdir()):
+                if p.is_file() and p.suffix.lower() in exts:
+                    kind = ("image" if p.suffix.lower() in IMAGE_EXTS
+                            else "audio" if p.suffix.lower() == ".flac" else "video")
+                    items.append({"name": str(p.relative_to(root)),
+                                  "mtime": int(p.stat().st_mtime), "kind": kind})
+            items.sort(key=lambda x: -x["mtime"])
+            return items[:limit]
+        self.reply({
+            "stage": rack(WAN_OUT, VIDEO_EXTS + IMAGE_EXTS),
+            "face": rack(COMFY_OUT, IMAGE_EXTS),
+            "foley": rack(MM_OUT, (".flac", ".mp4"), recurse=True),
         })
 
     def api_footage(self):

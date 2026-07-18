@@ -17,3 +17,4 @@
 /jobs/logs/
 /outputs/
 __pycache__/
+/jobs/prompter-*.json
