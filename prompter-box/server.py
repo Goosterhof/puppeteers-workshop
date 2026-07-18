@@ -524,7 +524,9 @@ def tail_lines(path, n=25):
         return []
 
 
-class Handler(BaseHTTPRequestHandler):
+class BoothWindow(BaseHTTPRequestHandler):
+    """The service hatch — every request to the booth passes through here."""
+
     def log_message(self, *args):
         pass
 
@@ -1025,4 +1027,4 @@ def split_variants(text):
 
 if __name__ == "__main__":
     print(f"The Prompter's Box opens its window on http://localhost:{PORT}")
-    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+    ThreadingHTTPServer(("0.0.0.0", PORT), BoothWindow).serve_forever()

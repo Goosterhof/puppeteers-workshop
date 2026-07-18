@@ -102,6 +102,7 @@
   .fire:disabled { background: var(--lamp-dim); cursor: wait; }
   .note { font-size: 12px; margin-top: 10px; }
   .error { color: var(--cue-red); font-size: 13px; margin-top: 12px; white-space: pre-wrap; }
+  .empty { font-size: 12px; font-style: italic; color: var(--dim); letter-spacing: .06em; }
 
   /* ---- cue cards (the signature) ---- */
   #cards { display: grid; gap: 18px; margin-top: 26px; }
@@ -262,7 +263,7 @@
       <p class="note" id="forge-note">First strike after idle loads the model — allow ~15 s. After that it's a few seconds.</p>
       <p class="error" id="forge-error" hidden></p>
     </div>
-    <div id="cards"></div>
+    <div id="cards"><p class="empty">The rack is empty — strike the forge and the cue cards deal here.</p></div>
   </section>
 
   <!-- STAGE -->
@@ -298,7 +299,7 @@
       <p class="note" id="stage-note">Wan 2.2 i2v Enhanced Lightning 14B — the identity-holding recipe from the bell-swing arc. First run after cold start adds model-load minutes.</p>
       <p class="error" id="stage-error" hidden></p>
       <div id="stage-log" hidden></div>
-      <div class="result" id="stage-result"></div>
+      <div class="result" id="stage-result"><p class="empty">No take yet — cue the stage and the reel mounts here.</p></div>
     </div>
   </section>
 
@@ -319,7 +320,7 @@
       </div>
       <p class="note">The house painter is Flux 2 Klein 9B, 4-step distilled — a take lands in seconds once warm. With a sitter picked the painter EDITS instead of painting fresh (the night-crier ReferenceLatent recipe): the cue describes the change — "repaint him as…", "replace the background with…", "swap the woman into…" — and width/height follow the sitter. The qwen3 text encoder and flux2 VAE are bolted to the easel, so only Flux 2 family painters will pair; drop new ones in <code>ComfyUI/models/diffusion_models/</code> and they appear here. (Krea 2 paints via the Stage — pick it a lead and it repaints at the strength knob.)</p>
       <p class="error" id="face-error" hidden></p>
-      <div class="result" id="face-result"></div>
+      <div class="result" id="face-result"><p class="empty">No painting yet — cue the face shop and it hangs here.</p></div>
     </div>
   </section>
 
@@ -341,7 +342,7 @@
       <p class="note">MMAudio (T2A + V2A) — with a reel picked, the sync module watches the frames and the duration snaps to the clip; without one, 8&nbsp;s is the trained sweet spot (trim the sting after). The "music" negative cue earns its seat — the model loves to score things unasked. ~6&nbsp;GB VRAM; weights CC-BY-NC — internal tooling only (runbook).</p>
       <p class="error" id="foley-error" hidden></p>
       <div id="foley-log" hidden></div>
-      <div class="result" id="foley-result"></div>
+      <div class="result" id="foley-result"><p class="empty">No score yet — cue the foley booth and it plays here.</p></div>
     </div>
   </section>
 
@@ -423,7 +424,17 @@ async function poll() {
 }
 const setLamp = (id, cls) => { $(id).className = 'lamp' + (cls ? ' ' + cls : ''); };
 poll(); setInterval(poll, 5000);
-$('evict').addEventListener('click', async () => { await api('/api/evict', {}); poll(); });
+$('evict').addEventListener('click', async () => {
+  const btn = $('evict');
+  try {
+    const {evicted} = await api('/api/evict', {});
+    btn.textContent = evicted.length
+      ? `${evicted.length} voice${evicted.length === 1 ? '' : 's'} left the boards`
+      : 'The boards were already clear';
+  } catch { btn.textContent = 'The booth is not answering'; }
+  setTimeout(() => { btn.textContent = 'Clear the boards'; }, 2600);
+  poll();
+});
 
 /* ---- forge ---- */
 let target = 'wan';
@@ -598,6 +609,11 @@ function pickForgeLead(name) {
 async function loadFootage(preselect) {
   const {images} = await api('/api/footage');
   $('thumbs').innerHTML = ''; $('forge-thumbs').innerHTML = ''; $('face-thumbs').innerHTML = '';
+  if (!images.length) {
+    for (const host of ['thumbs', 'forge-thumbs', 'face-thumbs'])
+      $(host).innerHTML = '<p class="empty">No footage on the shelf — drop stills into <code>footage/</code> and they appear here.</p>';
+    return;
+  }
   images.forEach(name => {
     for (const [host, onpick, current] of [['thumbs', n => pickThumb(n, true), pickedImage],
                                            ['forge-thumbs', pickForgeLead, forgeLead],
@@ -670,8 +686,15 @@ function bindStageActions() {
 }
 function watchStage() {
   clearInterval(stagePoller);
+  let misses = 0;
   stagePoller = setInterval(async () => {
-    const job = await api('/api/stage/job');
+    let job;
+    try { job = await api('/api/stage/job'); misses = 0; }
+    catch {
+      if (++misses < 3) return;
+      clearInterval(stagePoller);
+      return showError('stage-error', {message: 'The booth lost sight of the stage — the server stopped answering. Reload to reconnect; the take may still be running and will land in The Canisters.'});
+    }
     $('stage-log').textContent = (job.log_tail || []).join('\n');
     $('stage-log').scrollTop = $('stage-log').scrollHeight;
     if (job.state === 'running') return;
@@ -689,7 +712,7 @@ function watchStage() {
   }, 3000);
 }
 // resume watching if a job is already running when the page opens
-api('/api/stage/job').then(j => { if (j.state === 'running') { $('stage-log').hidden = false; watchStage(); } });
+api('/api/stage/job').then(j => { if (j.state === 'running') { $('stage-log').hidden = false; watchStage(); } }).catch(() => {});
 
 /* ---- face shop ---- */
 let faceSitter = null;
@@ -727,8 +750,15 @@ $('face-go').addEventListener('click', async () => {
       model: $('face-model').value || undefined, source: faceSitter || undefined,
     });
     $('face-result').innerHTML = '<span class="cap">Painting…</span>';
+    let misses = 0;
     const timer = setInterval(async () => {
-      const r = await api('/api/face/result/' + prompt_id);
+      let r;
+      try { r = await api('/api/face/result/' + prompt_id); misses = 0; }
+      catch (e) {
+        if (++misses < 3) return;
+        clearInterval(timer); $('face-go').disabled = false;
+        return showError('face-error', {message: 'The booth lost sight of the Face Shop — ' + (e.message || 'the server stopped answering') + '. Reload to reconnect; the painting may still land in The Canisters.'});
+      }
       if (r.state === 'painting') return;
       clearInterval(timer); $('face-go').disabled = false;
       if (r.state === 'done') {
@@ -736,7 +766,14 @@ $('face-go').addEventListener('click', async () => {
         loadArchive();
       } else {
         $('face-result').innerHTML = '';
-        showError('face-error', {message: 'The Face Shop rejected the cue — check the ComfyUI log for the brush that broke.'});
+        // ComfyUI's history reports [event, {node_type, exception_message, …}] pairs.
+        const detail = (r.detail || [])
+          .map(m => (Array.isArray(m) ? m[1] : m) || {})
+          .map(d => d.exception_message ? `${d.node_type ? d.node_type + ': ' : ''}${d.exception_message}` : '')
+          .filter(Boolean).join('\n');
+        showError('face-error', {message: detail
+          ? 'The Face Shop rejected the cue — the broken brush:\n' + detail
+          : 'The Face Shop rejected the cue — it kept the reason to itself; the ComfyUI log names the brush that broke.'});
       }
     }, 1500);
   } catch (e) { $('face-go').disabled = false; showError('face-error', e); }
@@ -786,7 +823,8 @@ function renderArchive() {
   const filtered = archRoom || archKind || $('arch-search').value.trim();
   $('arch-count').textContent = items.length
     ? `${items.length} canister${items.length === 1 ? '' : 's'} on the shelf${filtered ? ' — filtered' : ''}. Click one to mount it.`
-    : 'No canister answers that description — loosen a filter.';
+    : filtered ? 'No canister answers that description — loosen a filter.'
+    : 'The shelves are bare — nothing developed yet. Every Stage take, painting, and score lands here on its own.';
   const host = $('arch-grid');
   host.innerHTML = '';
   items.forEach(it => {
@@ -911,8 +949,15 @@ $('foley-go').addEventListener('click', async () => {
 });
 function watchFoley() {
   clearInterval(foleyPoller);
+  let misses = 0;
   foleyPoller = setInterval(async () => {
-    const job = await api('/api/foley/job');
+    let job;
+    try { job = await api('/api/foley/job'); misses = 0; }
+    catch {
+      if (++misses < 3) return;
+      clearInterval(foleyPoller);
+      return showError('foley-error', {message: 'The booth lost sight of the foley booth — the server stopped answering. Reload to reconnect; the score may still be recording.'});
+    }
     $('foley-log').textContent = (job.log_tail || []).join('\n');
     $('foley-log').scrollTop = $('foley-log').scrollHeight;
     if (job.state === 'running') return;
@@ -929,7 +974,7 @@ function watchFoley() {
     }
   }, 3000);
 }
-api('/api/foley/job').then(j => { if (j.state === 'running') { $('foley-log').hidden = false; watchFoley(); } });
+api('/api/foley/job').then(j => { if (j.state === 'running') { $('foley-log').hidden = false; watchFoley(); } }).catch(() => {});
 </script>
 </body>
 </html>

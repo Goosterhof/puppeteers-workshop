@@ -248,6 +248,32 @@ so it loads at ~11.5 GB.) This discipline is for MANUAL use of the tools —
 The Prompter's Box below automates it in both directions, with a fail-closed
 guard whose incident history is documented in its section.
 
+## The Keymaster — topology-aware background keying (added with the toll arc)
+
+`prompter-box/keymaster.py IN.mp4 OUT.webm [--crop WxH+X+Y] [--tolerance 20]
+[--min-island 3000] [--crf 40] [--fps 24]` — a CLI instrument, not a booth
+panel: it turns an illustrated take on a flat ground into a keyed VP9 WebM
+ready for the web's `mix-blend-mode: multiply` contract.
+
+Plain ffmpeg colorkey is purely chromatic — a tilted scroll catches the light,
+lands inside the tolerance band, and gets eaten (the TC-0057 toll take lost
+its wax seals to it). The Keymaster keys by topology instead:
+
+1. Background estimated PER FRAME — median of the 10 px border ring (flat
+   grounds wobble a few RGB points frame to frame).
+2. Candidate pixels sit within `--tolerance` of that estimate.
+3. A candidate region is keyed only if it TOUCHES the frame border (the true
+   ground always does; a scroll face never does) or exceeds `--min-island`
+   (an enclosed pocket of real ground, e.g. inside an arm akimbo).
+4. The kept mask is feathered (1 px gaussian) and composited onto pure white.
+
+**The one instrument excused from the stdlib rule:** it needs numpy + Pillow +
+scipy, which the system python does not carry — run it with any machine's venv
+python (Wan2GP, ComfyUI, and MMAudio all carry all three), e.g.
+`ComfyUI/.venv/bin/python prompter-box/keymaster.py …`. It shells out to the
+static ffmpeg in `~/.local/bin` for decode/encode (no torchcodec, so the
+shared-libs substrate is not needed here).
+
 ## Hard-won constraints
 
 - **Resolution discipline** — motion transfer degrades if driving video and generation

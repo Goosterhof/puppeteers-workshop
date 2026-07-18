@@ -35,11 +35,13 @@ bump the lab's ref (submodule discipline).
 | **The Prompter's Box** | `prompter-box/` (`./start-prompter.sh` → :7900) | The unified console — forge cues (voice pick from the Ollama shelf), paint in the Face Shop (headless ComfyUI, painter pick from the storeroom), animate on the Stage (headless `wgp.py --process` with a performer playbill enumerated from the weights on the floor — i2v 14B, t2v 5B, SCAIL-2 motion transfer, Krea 2 stills — each with a LoRA wardrobe off its family shelf plus steps/guidance knobs), score in the Foley Booth (headless MMAudio t2a/v2a — a Stage take is one click from its soundtrack), cast paintings into footage, all with fail-closed VRAM choreography |
 | **The Promptsmith** | `prompt-forge/promptsmith.py` | Generation-prompt forge on local Ollama models — `qwen3:14b` text, `qwen3-vl:8b` with `--image` (reads the stillness inventory off the actual pixels) |
 | **The Framewright** | `crop-tool/croptool.py` | Exact-resolution cropper with Wan presets — resolution discipline is the whole game in motion transfer |
+| **The Keymaster** | `prompter-box/keymaster.py` | Topology-aware background keying for illustrated takes — only border-connected regions (or `--min-island` pockets) are keyed, so a scroll face can never be eaten the way plain colorkey ate the TC-0057 wax seals; outputs multiply-ready VP9 WebM. The one instrument excused from the stdlib rule (numpy + Pillow + scipy — run it with a machine venv's python; see the runbook) |
 
 ## Conventions
 
 - Stdlib-only Python for the instruments — no venvs of our own; the machines
-  carry their own.
+  carry their own. (The Keymaster is the standing exception: its topology maths
+  need numpy + Pillow + scipy, borrowed from a machine venv's python.)
 - Commit scope: `workshop` (see the lab's Commit Doctrine).
 - Gadget containment protocols apply: the Prompter's Box carries the
   `prefers-reduced-motion` floor in its single-page CSS.
