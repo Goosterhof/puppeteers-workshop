@@ -138,13 +138,30 @@ session, or point any OpenAI-compatible client at `localhost:11434/v1`.
 pipeline (stdlib Python, `prompter-box/`, no venv):
 
 - **Forge** — the Promptsmith in a panel: idea → cue cards, each with
-  copy / "Cue the stage" / "Cue the face shop" buttons.
-- **The Stage** — headless Wan 2.2 i2v runs (`wgp.py --process`) using the
-  bell-swing arc's Enhanced Lightning 14B recipe: pick a start image from
-  `footage/`, set resolution/frames/seed, watch the log, get the video inline.
-  Settings JSONs land in `jobs/prompter-*.json`, logs in `jobs/logs/`.
-- **Face Shop** — headless Flux 2 Klein 9B text-to-image via the ComfyUI API
-  (needs `./start-comfyui.sh` running); result renders inline in seconds.
+  copy / "Cue the stage" / "Cue the face shop" buttons. A **voice dropdown**
+  (2026-07-18) lists every model on the Ollama shelf; "the booth decides"
+  keeps the house pairing (qwen3:14b text, qwen3-vl:8b when sighted).
+- **The Stage** — headless Wan2GP runs (`wgp.py --process`) with a
+  **performer dropdown** (added 2026-07-18): the playbill enumerates every
+  Wan2GP model type whose weights are actually in `ckpts/` (matching the
+  defaults JSONs' URL basenames — plus the LoRA check that keeps SVI 2 Pro
+  off the bill until its LoRA lands). Per-performer recipes layer the model's
+  `defaults/*.json` with the bench's own saved `settings/*_settings.json`,
+  and the UI reshapes per kind: Enhanced Lightning 14B (i2v, the bell-swing
+  arc house lead), TI2V 5B (t2v, lead optional, 12 GB guard), SCAIL-2 14B
+  (motion transfer — lead is the character, plus a choreography dropdown of
+  footage/Stage reels feeding `video_guide`), Krea 2 RAW (t2i on the Stage's
+  boards — no frames, stills land with **"Cast as a lead →"** to feed them
+  back into `footage/`). Settings JSONs land in `jobs/prompter-*.json`, logs
+  in `jobs/logs/`. Drop new weights into `ckpts/` and they appear on the
+  playbill without touching the booth.
+- **Face Shop** — headless text-to-image via the ComfyUI API (needs
+  `./start-comfyui.sh` running); result renders inline in seconds. A
+  **painter dropdown** (2026-07-18) enumerates `ComfyUI/models/
+  diffusion_models/` (GGUF loads through `UnetLoaderGGUF`, safetensors
+  through `UNETLoader`) — but the qwen3 text encoder and flux2 VAE are
+  bolted to the easel, so only Flux 2 family painters pair. Klein 9B
+  remains the house painter.
   Every painting carries **"Send to the stage →"**: copies it into `footage/`,
   jumps to the Stage with it preselected, and snaps the resolution to the
   nearest Wan aspect — paint the character, then animate it, one click apart.
@@ -161,7 +178,9 @@ pipeline (stdlib Python, `prompter-box/`, no venv):
   auto-evicts loaded LLMs first; "Clear the boards" evicts by hand. Stage cues
   are refused while the full Wan2GP UI holds :7860 (one GPU, one performance).
 - **The Stagehands' Guard (FAIL-CLOSED — incident 2026-07-09)** — before the
-  forge loads an LLM (13 GB VRAM needed) or the Stage starts a take (26 GB),
+  forge loads an LLM (13 GB VRAM needed) or the Stage starts a take (26 GB
+  for 14B-class performers, scaled down to 12 GB for the 5B — the playbill
+  sizes each clearance from the weights on the floor),
   the booth asks ComfyUI to strike its set (`POST /free`) and then VERIFIES
   via `nvidia-smi` that the memory actually returned, refusing the cue with a
   voiced 503 if it did not. Two subtleties baked in: the `/free` flags are only

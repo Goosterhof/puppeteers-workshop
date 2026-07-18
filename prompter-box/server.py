@@ -33,7 +33,12 @@ JOB_LOGS = JOBS / "logs"
 WAN_DIR = BASE / "Wan2GP"
 WAN_PY = WAN_DIR / ".venv" / "bin" / "python"
 WAN_OUT = WAN_DIR / "outputs"
+WAN_DEFAULTS = WAN_DIR / "defaults"
+WAN_SETTINGS = WAN_DIR / "settings"
+WAN_CKPTS = WAN_DIR / "ckpts"
+WAN_LORAS = WAN_DIR / "loras"
 COMFY_OUT = BASE / "ComfyUI" / "output"
+COMFY_PAINTERS = BASE / "ComfyUI" / "models" / "diffusion_models"
 MM_DIR = BASE / "MMAudio"
 MM_PY = MM_DIR / ".venv" / "bin" / "python"
 MM_OUT = MM_DIR / "output" / "prompter"
@@ -47,17 +52,106 @@ PORT = 7900
 sys.path.insert(0, str(BASE / "prompt-forge"))
 from promptsmith import DEFAULT_MODEL, FORGE_PROFILES, VISION_MODEL, forge  # noqa: E402
 
-# The arc-proven Wan 2.2 i2v Enhanced Lightning recipe (jobs/crier-bell-14b.json)
-WAN_RECIPE = {
-    "model_type": "i2v_2_2_Enhanced_Lightning_v2",
-    "image_prompt_type": "S",
-    "num_inference_steps": 4,
-    "guidance_phases": 2,
-    "switch_threshold": 900,
-    "guidance_scale": 1,
-    "guidance2_scale": 1,
-    "flow_shift": 5,
+# The house lead — the arc-proven Wan 2.2 i2v Enhanced Lightning recipe
+# (jobs/crier-bell-14b.json). Other performers join the playbill dynamically:
+# any Wan2GP model type whose weights are actually on the floor (see
+# stage_playbill) becomes selectable, with its recipe layered from the
+# model's defaults JSON plus the bench's own saved UI settings.
+DEFAULT_PERFORMER = "i2v_2_2_Enhanced_Lightning_v2"
+
+# What each performer expects at the stage door. Kinds:
+#   i2v  — video from a start image (lead required)
+#   t2v  — video from text (lead optional)
+#   swap — motion transfer (lead = the character, plus a driving video)
+#   t2i  — a still image (no lead, no frames)
+PERFORMER_NOTES = {
+    "i2v_2_2_Enhanced_Lightning_v2":
+        "The identity-holding recipe from the bell-swing arc. Once motion reads, "
+        "iterate by seed, not prompt. A 41-frame take denoises in ~1 min.",
+    "ti2v_2_2":
+        "The 5B — a lighter performer that works from text alone; hand it a lead "
+        "and it starts from the image instead. 50 undistilled steps: slower per "
+        "frame than the Lightning 14B, but it fits the GPU with room to spare.",
+    "scail2_14B":
+        "Motion transfer — the lead is the CHARACTER, the driving video is the "
+        "CHOREOGRAPHY. It re-performs the driving video's motion with your "
+        "character. 40 steps; budget several minutes per take.",
+    "krea2_raw":
+        "An image performer on the Stage's boards — Krea 2 RAW paints one still "
+        "per cue (52 CFG-guided steps). No frames, no lead; resolution and seed "
+        "are the whole conversation.",
 }
+
+
+def performer_kind(model_type, arch):
+    a = (arch or model_type or "").lower()
+    if a.startswith(("krea2", "flux", "qwen_image", "z_image", "ideogram", "hidream")):
+        return "t2i"
+    if "scail" in a or a in ("animate", "steadydancer", "wanmove"):
+        return "swap"
+    if a == "ti2v_2_2" or a.startswith("t2v"):
+        return "t2v"
+    return "i2v"
+
+
+def stage_playbill():
+    """Every Wan2GP model type whose weights are actually on the floor.
+
+    A defaults JSON earns its playbill seat only when at least one file from
+    URLs (and URLs2, when the model swaps weights mid-run) is present in
+    ckpts/ — and, when the model rides on a named LoRA set (SVI 2 Pro), the
+    LoRA is present too. Anything else would be a lie that ends in a
+    multi-GB surprise download mid-cue.
+    """
+    try:
+        installed = {p.name: p.stat().st_size for p in WAN_CKPTS.iterdir() if p.is_file()}
+    except OSError:
+        return []
+    def present(urls):
+        if not isinstance(urls, list):
+            return []
+        names = [u.rsplit("/", 1)[-1] for u in urls if isinstance(u, str) and u.startswith("http")]
+        return [n for n in names if n in installed]
+    playbill = []
+    for f in sorted(WAN_DEFAULTS.glob("*.json")):
+        try:
+            d = json.loads(f.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        m = d.get("model") or {}
+        w1, w2 = present(m.get("URLs")), present(m.get("URLs2"))
+        if not w1 or (isinstance(m.get("URLs2"), list) and m["URLs2"] and not w2):
+            continue
+        if (lora_ref := m.get("loras")) and isinstance(lora_ref, str):
+            if not list(WAN_LORAS.glob(f"**/*{lora_ref}*")):
+                continue  # the finetune's LoRA never made it to the floor
+        # Recipe layering: model defaults, then the bench's own saved UI
+        # settings for this type — the numbers a human actually dialed in.
+        recipe = {k: v for k, v in d.items() if k not in ("model", "prompt")}
+        saved = WAN_SETTINGS / f"{f.stem}_settings.json"
+        if saved.exists():
+            try:
+                s = json.loads(saved.read_text())
+                s.pop("prompt", None)
+                s.pop("settings_version", None)
+                recipe.update(s)
+            except (OSError, json.JSONDecodeError):
+                pass
+        largest_gb = max(installed[n] for n in w1 + w2) / 1e9
+        kind = performer_kind(f.stem, m.get("architecture"))
+        playbill.append({
+            "type": f.stem,
+            "name": m.get("name") or f.stem,
+            "kind": kind,
+            # 14B-class weights earned the proven 26 GB clearance; smaller
+            # performers scale down so the guard never over-refuses.
+            "vram_gb": 26 if largest_gb >= 10 else 18 if largest_gb >= 6 else 12,
+            "resolution": recipe.get("resolution") or ("1024x1024" if kind == "t2i" else "704x1280"),
+            "video_length": recipe.get("video_length", 41),
+            "note": PERFORMER_NOTES.get(f.stem, ""),
+            "recipe": recipe,
+        })
+    return playbill
 
 stage_lock = threading.Lock()
 stage_job = {"state": "idle"}  # idle | running | done | failed
@@ -161,9 +255,29 @@ def clear_the_set(min_vram_gb, wait_s=30):
     return False, free
 
 
-def klein_graph(prompt, width, height, seed, steps, prefix="PrompterBox"):
+DEFAULT_PAINTER = "flux-2-klein-9b-BF16.gguf"
+
+
+def face_painters():
+    """Diffusion models hanging in the Face Shop's storeroom."""
+    try:
+        return sorted(p.name for p in COMFY_PAINTERS.iterdir()
+                      if p.suffix.lower() in (".gguf", ".safetensors"))
+    except OSError:
+        return []
+
+
+def klein_graph(prompt, width, height, seed, steps, prefix="PrompterBox", painter=DEFAULT_PAINTER):
+    # GGUF painters load through the GGUF door, safetensors through the
+    # standard one. The qwen3 text encoder and flux2 VAE are bolted to the
+    # easel — only Flux 2 family painters will pair with them.
+    loader = (
+        {"class_type": "UnetLoaderGGUF", "inputs": {"unet_name": painter}}
+        if painter.lower().endswith(".gguf")
+        else {"class_type": "UNETLoader", "inputs": {"unet_name": painter, "weight_dtype": "default"}}
+    )
     return {
-        "1": {"class_type": "UnetLoaderGGUF", "inputs": {"unet_name": "flux-2-klein-9b-BF16.gguf"}},
+        "1": loader,
         "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen_3_8b_fp8mixed.safetensors", "type": "flux2"}},
         "3": {"class_type": "VAELoader", "inputs": {"vae_name": "flux2-vae.safetensors"}},
         "4": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}},
@@ -190,12 +304,14 @@ def run_stage_job(settings_path, log_path):
         stage_job.update({"pid": proc.pid})
         code = proc.wait()
     new = sorted({p.name for p in WAN_OUT.glob("*")} - before) if WAN_OUT.exists() else []
-    videos = [n for n in new if n.lower().endswith((".mp4", ".webm", ".mkv"))]
+    # Video performers land reels; image performers (Krea 2) land stills.
+    media = [n for n in new
+             if n.lower().endswith((".mp4", ".webm", ".mkv", ".png", ".jpg", ".jpeg", ".webp"))]
     stage_job.update(
         {
-            "state": "done" if code == 0 and videos else "failed",
+            "state": "done" if code == 0 and media else "failed",
             "exit_code": code,
-            "outputs": videos or new,
+            "outputs": media or new,
             "finished": datetime.now().isoformat(timespec="seconds"),
         }
     )
@@ -285,6 +401,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.api_footage()
         if path == "/api/stage/job":
             return self.api_stage_job()
+        if path == "/api/stage/models":
+            return self.api_stage_models()
+        if path == "/api/face/models":
+            return self.api_face_models()
+        if path == "/api/forge/models":
+            return self.api_forge_models()
         if path == "/api/foley/job":
             return self.api_foley_job()
         if path == "/api/foley/sources":
@@ -380,10 +502,35 @@ class Handler(BaseHTTPRequestHandler):
     def api_evict(self, _p):
         self.reply({"evicted": evict_llms()})
 
+    def api_forge_models(self):
+        """Every voice on the Ollama shelf, so the forge is not stuck with two."""
+        try:
+            tags = http_json(f"{OLLAMA}/api/tags", timeout=3).get("models", [])
+        except OSError:
+            return self.reply({"models": [], "default_text": DEFAULT_MODEL,
+                               "default_vision": VISION_MODEL})
+        self.reply({
+            "models": sorted(m["name"] for m in tags),
+            "default_text": DEFAULT_MODEL,
+            "default_vision": VISION_MODEL,
+        })
+
+    def api_face_models(self):
+        painters = face_painters()
+        self.reply({
+            "painters": painters,
+            "default": DEFAULT_PAINTER if DEFAULT_PAINTER in painters
+                       else (painters[0] if painters else None),
+        })
+
     def api_face_generate(self, p):
         prompt = (p.get("prompt") or "").strip()
         if not prompt:
             return self.fail("The Face Shop paints nothing from an empty cue.")
+        painter = (p.get("model") or DEFAULT_PAINTER).strip()
+        if painter not in face_painters():
+            return self.fail(f"No painter named '{painter}' hangs in the storeroom — "
+                             "check /api/face/models for the roster.", 404)
         if stage_job.get("state") == "running":
             return self.fail("The Stage is mid-performance — the GPU cannot serve two masters. "
                              "Wait for the take to finish.", 409)
@@ -395,7 +542,7 @@ class Handler(BaseHTTPRequestHandler):
         stamp = datetime.now().strftime("%H%M%S")
         graph = klein_graph(prompt, int(p.get("width", 768)), int(p.get("height", 1024)),
                             int(p.get("seed", int(time.time()) % 2**31)), int(p.get("steps", 4)),
-                            prefix=f"PrompterBox-{stamp}")
+                            prefix=f"PrompterBox-{stamp}", painter=painter)
         try:
             res = http_json(f"{COMFY}/prompt", {"prompt": graph}, timeout=15)
         except OSError:
@@ -417,14 +564,50 @@ class Handler(BaseHTTPRequestHandler):
                   for img in node.get("images", [])]
         self.reply({"state": "done", "images": images})
 
+    def api_stage_models(self):
+        bill = stage_playbill()
+        self.reply({
+            "models": [{k: v for k, v in m.items() if k != "recipe"} for m in bill],
+            "default": DEFAULT_PERFORMER if any(m["type"] == DEFAULT_PERFORMER for m in bill)
+                       else (bill[0]["type"] if bill else None),
+        })
+
+    def resolve_reel(self, ref):
+        """'footage:name' or 'stage:name' → a verified path, or None."""
+        source, _, name = (ref or "").partition(":")
+        root = WAN_OUT if source == "stage" else FOOTAGE
+        target = (root / name).resolve() if name else None
+        if target and target.is_relative_to(root.resolve()) and target.is_file():
+            return target
+        return None
+
     def api_stage_generate(self, p):
         global stage_job
-        prompt, image = (p.get("prompt") or "").strip(), (p.get("image") or "").strip()
-        if not prompt or not image:
-            return self.fail("The Stage needs both a cue (prompt) and a lead (start image).")
-        start = (FOOTAGE / image).resolve()
-        if not start.is_relative_to(FOOTAGE.resolve()) or not start.is_file():
-            return self.fail(f"'{image}' is not in the footage archive.", 404)
+        prompt = (p.get("prompt") or "").strip()
+        if not prompt:
+            return self.fail("The Stage needs a cue (prompt).")
+        model_type = (p.get("model_type") or DEFAULT_PERFORMER).strip()
+        performer = next((m for m in stage_playbill() if m["type"] == model_type), None)
+        if not performer:
+            return self.fail(f"No performer named '{model_type}' has weights on the floor — "
+                             "check /api/stage/models for tonight's playbill.", 404)
+        kind = performer["kind"]
+        image = (p.get("image") or "").strip()
+        start = None
+        if image:
+            start = (FOOTAGE / image).resolve()
+            if not start.is_relative_to(FOOTAGE.resolve()) or not start.is_file():
+                return self.fail(f"'{image}' is not in the footage archive.", 404)
+        if kind in ("i2v", "swap") and not start:
+            role = "the character to animate" if kind == "swap" else "the start image"
+            return self.fail(f"{performer['name']} needs a lead — {role}. "
+                             "Pick one from the footage.")
+        guide = None
+        if kind == "swap":
+            guide = self.resolve_reel(p.get("video_guide"))
+            if not guide:
+                return self.fail(f"{performer['name']} is a motion-transfer performer — it needs "
+                                 "a driving video (the choreography) alongside the lead.")
         if port_open(WAN_UI_PORT):
             return self.fail("The Wan2GP UI is holding the stage on :7860 — two performances "
                              "cannot share the GPU. Close it, then cue again.", 409)
@@ -434,38 +617,55 @@ class Handler(BaseHTTPRequestHandler):
             if stage_job.get("state") == "running":
                 return self.fail("The Stage is mid-performance — one take at a time.", 409)
             evicted = evict_llms()
-            ok, free = clear_the_set(min_vram_gb=26)
+            need = performer["vram_gb"]
+            ok, free = clear_the_set(min_vram_gb=need)
             if not ok:
                 return self.fail(
-                    f"The stagehands could not clear the GPU for the Stage — {free:.1f} GB "
-                    "free, 26 needed for the 14B performance. The Face Shop is refusing to "
+                    f"The stagehands could not clear the GPU for {performer['name']} — "
+                    f"{free:.1f} GB free, {need} needed. The Face Shop is refusing to "
                     "strike its set; give it a moment and cue again, or restart ComfyUI.", 503)
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            settings = dict(WAN_RECIPE)
+            settings = dict(performer["recipe"])
             settings.update({
-                "prompt": prompt, "image_start": str(start),
-                "resolution": p.get("resolution", "704x1280"),
-                "video_length": int(p.get("video_length", 41)),
+                "model_type": model_type,
+                "prompt": prompt,
+                "resolution": p.get("resolution") or performer["resolution"],
                 "seed": int(p.get("seed", 7)),
             })
+            if kind != "t2i":
+                settings["video_length"] = int(p.get("video_length") or performer["video_length"])
+            if start:
+                settings["image_start"] = str(start)
+                settings["image_prompt_type"] = "S"
+            elif kind == "t2v":
+                settings["image_prompt_type"] = "T"
+            if guide:
+                settings["video_guide"] = str(guide)
             JOB_LOGS.mkdir(parents=True, exist_ok=True)
             WAN_OUT.mkdir(parents=True, exist_ok=True)
             settings_path = JOBS / f"prompter-{stamp}.json"
             settings_path.write_text(json.dumps([settings], indent=1))
             log_path = JOB_LOGS / f"prompter-{stamp}.log"
             stage_job = {"state": "running", "started": datetime.now().isoformat(timespec="seconds"),
-                         "settings": settings_path.name, "log": log_path.name, "seed": settings["seed"]}
+                         "settings": settings_path.name, "log": log_path.name, "seed": settings["seed"],
+                         "model": performer["name"], "kind": kind}
             threading.Thread(target=run_stage_job, args=(settings_path, log_path), daemon=True).start()
             self.reply({"state": "running", "settings": settings_path.name, "evicted": evicted})
         finally:
             stage_lock.release()
 
     def api_stage_cast(self, p):
-        """Promote a Face Shop painting into the footage archive as a Stage lead."""
+        """Promote a painting into the footage archive as a Stage lead.
+
+        Face Shop paintings by default; Krea 2 stills land in the Stage's own
+        output rack, so 'from: stage' casts from there — paint with one
+        performer, animate with another.
+        """
         name = (p.get("image") or "").strip()
-        src = (COMFY_OUT / name).resolve()
-        if not src.is_relative_to(COMFY_OUT.resolve()) or not src.is_file():
-            return self.fail("That painting is not hanging in the Face Shop.", 404)
+        root = WAN_OUT if p.get("from") == "stage" else COMFY_OUT
+        src = (root / name).resolve()
+        if not src.is_relative_to(root.resolve()) or not src.is_file():
+            return self.fail("That painting is not hanging on that rack.", 404)
         shutil.copyfile(src, FOOTAGE / src.name)
         self.reply({"cast": src.name})
 
