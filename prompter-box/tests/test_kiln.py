@@ -64,6 +64,24 @@ class TestKeyPropImage:
         assert rgba[:, 0].sum(axis=0)[3] == 0 and rgba[:, -1].sum(axis=0)[3] == 0
         assert rgba[100, 100, 3] == 255  # the subject survives whole
 
+    def test_should_shed_the_klein_edge_vignette_before_sampling_the_ring(self, tmp_path):
+        """The first live firing's refusal, as a fixture: Klein grounds wear a
+        ~14 px darker edge vignette whose corners sit ~55 distance units off
+        the ring median — the crop-first law (Menagerie, 2026-07-10) must key
+        it clean without widening the tolerance."""
+        painting = paint_fixture(tmp_path / "vignetted.png")
+        img = np.asarray(Image.open(painting)).copy()
+        h, w, _ = img.shape
+        yy, xx = np.mgrid[0:h, 0:w]
+        edge = np.minimum(np.minimum(yy, h - 1 - yy), np.minimum(xx, w - 1 - xx))
+        shade = np.clip((14 - edge) / 14, 0, 1) * 0.25       # up to 25% darker rim
+        img = (img * (1 - shade[..., None])).astype(np.uint8)
+        Image.fromarray(img, "RGB").save(painting)
+        rgba = kiln.key_prop_image(painting)                  # must NOT refuse
+        assert rgba[0].sum(axis=0)[3] == 0 and rgba[-1].sum(axis=0)[3] == 0
+        assert rgba[:, 0].sum(axis=0)[3] == 0 and rgba[:, -1].sum(axis=0)[3] == 0
+        assert rgba[86, 86, 3] == 255  # the subject (shifted by the crop) survives
+
     def test_should_fail_closed_when_the_subject_reaches_the_border(self, tmp_path):
         img = np.zeros((100, 100, 3), dtype=np.uint8)
         img[...] = (255, 0, 255)

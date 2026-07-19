@@ -91,7 +91,7 @@ def ram_available_gb():
     return None
 
 
-def clear_the_set(min_vram_gb, wait_s=30):
+def clear_the_set(min_vram_gb, wait_s=90):
     """Ask ComfyUI to strike its set, then VERIFY the GPU is actually clear.
 
     Returns (ok, vram_free_gb). FAIL-CLOSED by design: callers must refuse
@@ -99,6 +99,12 @@ def clear_the_set(min_vram_gb, wait_s=30):
     into system RAM on top of ComfyUI's ~21 GB weight cache — that exact
     stampede OOM-killed the 31 GB WSL VM twice on 2026-07-09 and took the
     GPU bridge (dxg) down with it.
+
+    wait_s is 90, not 30: WSL2's dxg bridge releases VRAM lazily — on the
+    first live Kiln firing (2026-07-19) Klein's strike completed somewhere
+    between 30 and ~90 s after /free, and the 30 s guard refused a mesh
+    stage the GPU was about to be ready for. Patience is not weakness:
+    the guard still refuses when the set genuinely will not strike.
     """
     free = gpu_vram_free_gb()
     if free is None or free >= min_vram_gb:

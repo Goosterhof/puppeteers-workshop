@@ -57,6 +57,11 @@ ALPHA_BBOX_PAD = 6         # the +6 px crop law — uncropped hides dress props 
 KEY_TOLERANCE = 20.0       # the Keymaster's own chroma distance
 KEY_MIN_ISLAND = 3000      # enclosed pockets of true ground (inside an arm akimbo)
 BORDER_RING = 10
+VIGNETTE_CROP = 14         # Klein stills wear a ~14 px darker edge vignette that
+                           # survives chroma-distance keying — crop it FIRST
+                           # (the Menagerie's own law, comfyui-wangp-ops 2026-07-10;
+                           # first live firing refused at border alpha 451605
+                           # until this was ported)
 
 MESH_VRAM_GB = 10          # Hunyuan3D 2.1 all-in-one is 7.4 GB — asked with margin
 PAINT_VRAM_GB = 12         # Klein 9B GGUF + encoder/VAE clearance at the door
@@ -267,8 +272,17 @@ def key_prop_image(png_path, tolerance=KEY_TOLERANCE, min_island=KEY_MIN_ISLAND)
     only regions that touch the frame border (or enclosed pockets larger
     than min_island) are keyed, so a subject's face can never be eaten.
     Border alpha must land at EXACTLY 0 after keying, or the gate fails
-    closed and the firing is refused — never silently shipped translucent."""
+    closed and the firing is refused — never silently shipped translucent.
+
+    The ~14 px edge vignette Klein paints on a still is cropped BEFORE the
+    ring is sampled — vignetted corners sit ~55 chroma-distance units off
+    the ring median (measured on the first live omafiets firing) and no
+    honest tolerance can hold both them and the subject. The Menagerie's
+    pipeline learned this on 2026-07-10; the Kiln inherits the law rather
+    than widening the tolerance."""
     rgb = np.asarray(Image.open(png_path).convert("RGB"))
+    if min(rgb.shape[:2]) > 4 * VIGNETTE_CROP:
+        rgb = rgb[VIGNETTE_CROP:-VIGNETTE_CROP, VIGNETTE_CROP:-VIGNETTE_CROP]
     h, w, _ = rgb.shape
     ring = np.concatenate([
         rgb[:BORDER_RING].reshape(-1, 3),
