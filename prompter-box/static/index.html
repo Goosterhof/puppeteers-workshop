@@ -26,6 +26,12 @@
     --display: 'Oswald', 'Arial Narrow', 'Helvetica Neue', sans-serif;
     --body: system-ui, 'Segoe UI', sans-serif;
     --typed: 'Courier Prime', 'Courier New', monospace;
+    /* the kiln's sub-dialect: heat that healed */
+    --ember:     #cc6b33;   /* the kiln's healed scar — refired-and-recovered, warm not alarming */
+    --ember-dim: #7a4322;   /* scar-chip ground/border */
+    --cured:     #7da16b;   /* QA passed  — semantic alias of --go-green */
+    --tattered:  #c2543a;   /* QA failed / still shredding — alias of --cue-red */
+    --curing:    #8a6a2e;   /* QA pending — alias of --lamp-dim */
   }
   * { box-sizing: border-box; margin: 0; }
   body {
@@ -96,6 +102,7 @@
   .callboard.blackout .station:nth-child(2) .eye { transition-delay: .08s; }
   .callboard.blackout .station:nth-child(3) .eye { transition-delay: .16s; }
   .callboard.blackout .station:nth-child(4) .eye { transition-delay: .24s; }
+  .callboard.blackout .station:nth-child(5) .eye { transition-delay: .32s; }  /* the Kiln joins the L→R cool */
   .dimmer { flex: 1 1 180px; display: flex; flex-direction: column; justify-content: center; gap: 5px; }
   .dimmer .occ-label { font: 10px var(--display); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); }
   .dimmer .track { height: 8px; background: var(--meter-well); border-radius: 4px; overflow: hidden; }
@@ -265,6 +272,104 @@
   }
   .cast:hover { border-color: var(--lamp); color: var(--lamp); }
 
+  /* ---- the kiln room / curing rack / night shift ---- */
+  details.kiln-settings { margin-top: 14px; }
+  details.kiln-settings summary {
+    cursor: pointer; font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--dim);
+  }
+  details.kiln-settings summary:hover { color: var(--lamp); }
+  details.kiln-settings .row { margin-top: 10px; }
+  .sided { display: flex; align-items: center; gap: 8px; margin-top: 12px;
+           font-size: 12px; letter-spacing: .06em; }
+  .sided input { accent-color: var(--lamp); }
+  #rack-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+               gap: 14px; margin-top: 16px; }
+  .candidate { cursor: default; animation: deal .35s ease-out backwards; }
+  .candidate:nth-child(2) { animation-delay: .08s; }
+  .candidate:nth-child(3) { animation-delay: .16s; }
+  .candidate:nth-child(4) { animation-delay: .24s; }
+  .candidate .well {
+    position: relative; height: 148px; background: #0d0b08;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .candidate .well img.spin { width: 100%; height: 148px; object-fit: contain; display: block; }
+  .candidate .well .no-spin { color: var(--curing); font-size: 26px; }
+  .qa-badge {
+    position: absolute; top: 0; right: 0;
+    font: 11px var(--display); letter-spacing: .2em; text-transform: uppercase; color: var(--ink);
+    padding: 4px 12px 4px 10px;
+    clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%);
+  }
+  .qa-badge.cured    { background: var(--cured); }
+  .qa-badge.tattered { background: var(--tattered); color: var(--paper); }
+  .qa-badge.curing   { background: var(--curing); }
+  .chip.scar { color: var(--ember); border-color: var(--ember-dim); }
+  @keyframes mend {           /* ember-flare: the scar glows hot, then settles */
+    0%   { box-shadow: 0 0 0 rgba(204,107,51,0);   color: var(--ember); }
+    35%  { box-shadow: 0 0 14px rgba(204,107,51,.7); color: var(--filament); }
+    100% { box-shadow: 0 0 0 rgba(204,107,51,0);   color: var(--ember); }
+  }
+  .candidate.mended .chip.scar { animation: mend .9s ease-out; }
+  .candidate .qa-line { font-size: 11.5px; font-style: italic; color: var(--dim);
+                        margin-top: 8px; line-height: 1.45; }
+  .candidate .acts { display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+  .candidate .acts .fire { margin-top: 0; padding: 8px 16px; font-size: 11px; }
+  .candidate .act {
+    background: none; border: 1px solid var(--drape-edge); color: var(--dim);
+    font: 11px var(--display); letter-spacing: .16em; text-transform: uppercase;
+    padding: 7px 12px; cursor: pointer; border-radius: 2px;
+  }
+  .candidate .act:hover { border-color: var(--lamp-dim); color: var(--lamp); }
+  .candidate .approve-row, .candidate .refire-row { margin-top: 10px; display: flex; gap: 6px; }
+  .candidate .approve-row input[type=text] { font-size: 12px; padding: 7px 9px; }
+  .candidate .refire-row input { width: 64px; font-size: 12px; padding: 7px 6px; }
+  /* the night shift call sheet */
+  #shift-rows { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 8px; }
+  .order {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--booth); border: 1px solid var(--drape-edge); border-radius: 3px;
+    padding: 9px 12px;
+  }
+  .order .eye {
+    flex: none; width: 11px; height: 11px; border-radius: 50%;
+    background: var(--stage-off); box-shadow: inset 0 1px 2px rgba(0,0,0,.7);
+  }
+  .order[data-status="queued"] .eye { background: var(--lamp-dim); opacity: .5; }
+  .order[data-status="firing"] .eye {
+    background: radial-gradient(circle at 40% 35%, var(--filament), var(--lamp) 70%);
+    box-shadow: 0 0 8px rgba(232,176,74,.9); animation: eye-pulse 1.4s ease-in-out infinite;
+  }
+  .order[data-status="done"] .eye { background: var(--cured); box-shadow: 0 0 6px rgba(125,161,107,.5); }
+  .order[data-status="failed"] .eye { background: var(--tattered); box-shadow: 0 0 6px rgba(194,84,58,.6); }
+  .order .status { font: 10px var(--display); letter-spacing: .18em; text-transform: uppercase;
+                   color: var(--dim); width: 52px; flex: none; }
+  .order[data-status="firing"] .status { color: var(--filament); }
+  .order[data-status="done"] .status { color: var(--cured); }
+  .order[data-status="failed"] .status { color: var(--tattered); }
+  .order .subject { font: 12.5px var(--typed); color: var(--paper); flex: 1;
+                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .order .k, .order .progress { font: 11px var(--typed); color: var(--dim); flex: none; }
+  .order .reason { font-size: 11px; font-style: italic; color: var(--tattered); flex: 2;
+                   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .order .handles { display: flex; gap: 4px; flex: none; }
+  .order .handles .act {
+    background: none; border: 1px solid var(--drape-edge); color: var(--dim);
+    font: 10px var(--display); letter-spacing: .1em; text-transform: uppercase;
+    padding: 3px 8px; cursor: pointer; border-radius: 2px;
+  }
+  .order .handles .act:hover { border-color: var(--lamp-dim); color: var(--lamp); }
+  #shift-log {
+    background: var(--booth); border: 1px solid var(--drape-edge); border-radius: 2px;
+    font: 12px var(--typed); color: var(--dim); padding: 12px 14px;
+    max-height: 220px; overflow-y: auto; margin-top: 16px; white-space: pre-wrap;
+  }
+  #kiln-log {
+    background: var(--booth); border: 1px solid var(--drape-edge); border-radius: 2px;
+    font: 12px var(--typed); color: var(--dim); padding: 12px 14px;
+    max-height: 220px; overflow-y: auto; margin-top: 16px; white-space: pre-wrap;
+  }
+
   /* ---- embedded UIs ---- */
   .house iframe { width: 100%; height: 78vh; border: 1px solid var(--drape-edge); border-radius: 3px; background: #111; }
   .house .note a { color: var(--lamp); }
@@ -306,6 +411,10 @@
       <i class="eye"></i><b class="pos">Foley</b>
       <span class="cue">MMAudio</span><span class="state">dark</span><span class="read"></span>
     </div>
+    <div class="station dark" data-station="kiln">
+      <i class="eye"></i><b class="pos">Kiln</b>
+      <span class="cue">Hunyuan3D · Klein</span><span class="state">dark</span><span class="read"></span>
+    </div>
     <div class="dimmer">
       <span class="occ-label">Stage load</span>
       <div class="track"><i id="occ-fill"></i></div>
@@ -316,6 +425,9 @@
 
   <nav role="tablist">
     <button role="tab" aria-selected="true" data-tab="forge">Forge</button>
+    <button role="tab" aria-selected="false" data-tab="kiln">The Kiln</button>
+    <button role="tab" aria-selected="false" data-tab="rack">The Curing Rack</button>
+    <button role="tab" aria-selected="false" data-tab="nightshift">The Night Shift</button>
     <button role="tab" aria-selected="false" data-tab="stage">The Stage</button>
     <button role="tab" aria-selected="false" data-tab="face">Face Shop</button>
     <button role="tab" aria-selected="false" data-tab="foley">Foley Booth</button>
@@ -356,6 +468,72 @@
       <p class="error" id="forge-error" hidden></p>
     </div>
     <div id="cards"><p class="empty">The rack is empty — strike the forge and the cue cards deal here.</p></div>
+  </section>
+
+  <!-- THE KILN -->
+  <section id="tab-kiln" hidden>
+    <div class="panel">
+      <label class="field" for="kiln-subject">What are we firing?</label>
+      <textarea id="kiln-subject" placeholder="a black omafiets leaning at a slight angle"></textarea>
+      <label class="sided"><input type="checkbox" id="kiln-two-sided">
+        Two-sided — declare asymmetry; the room won't guess</label>
+      <details class="kiln-settings">
+        <summary>Kiln settings · the defaults are the prop-dressing laws</summary>
+        <div class="row">
+          <div><label class="field" for="kiln-octree">Octree</label>
+            <input id="kiln-octree" type="number" value="128" min="16" max="512" step="16"></div>
+          <div><label class="field" for="kiln-threshold">Threshold</label>
+            <input id="kiln-threshold" type="number" value="0.5" min="0.1" max="1" step="0.05"></div>
+          <div><label class="field" for="kiln-seed">Seed</label>
+            <input id="kiln-seed" type="number" placeholder="the kiln picks"></div>
+        </div>
+      </details>
+      <button class="fire" id="kiln-go">Fire it</button>
+      <p class="note">The kiln fires the subject on a palette-disjoint chroma ground, keys it
+        clean (border alpha lands at exactly 0 or the firing is refused), meshes it through
+        Hunyuan3D, and checks the silhouette before you see it. A thin structure that
+        tatters at 128 is refired once at 224 — the room remembers the laws so you don't.</p>
+      <p class="error" id="kiln-error" hidden></p>
+      <div id="kiln-log" hidden></div>
+      <div class="result" id="kiln-result"><p class="empty">No firing yet — name a subject and the kiln lights.</p></div>
+    </div>
+  </section>
+
+  <!-- THE CURING RACK -->
+  <section id="tab-rack" hidden>
+    <div class="panel">
+      <p class="note">Every fired candidate waits here for a verdict. Two buttons, and only
+        two: <b>Approve</b> moves the pair into the pack queue; <b>Refire</b> re-meshes the
+        SAME painting at a new octree. Nothing ships without a thumb on Approve.</p>
+      <p class="error" id="rack-error" hidden></p>
+      <div id="rack-grid"></div>
+    </div>
+  </section>
+
+  <!-- THE NIGHT SHIFT -->
+  <section id="tab-nightshift" hidden>
+    <div class="panel">
+      <div class="row">
+        <div style="flex:3;min-width:220px">
+          <label class="field" for="shift-subject">Add an order — a subject phrase</label>
+          <input id="shift-subject" type="text" placeholder="terracotta geraniums in a weathered pot">
+        </div>
+        <div style="max-width:90px">
+          <label class="field" for="shift-k" title="K seed-varied takes of one subject, or list K phrases for K different props">K</label>
+          <input id="shift-k" type="number" value="1" min="1" max="12"
+                 title="K seed-varied takes of one subject, or list K phrases for K different props">
+        </div>
+        <div style="max-width:150px">
+          <label class="sided" style="margin-top:0"><input type="checkbox" id="shift-two-sided"> 2-sided</label>
+        </div>
+        <div style="max-width:110px"><button class="fire" id="shift-add" style="margin-top:0">+ Add</button></div>
+        <div style="max-width:220px"><button class="fire" id="shift-start" style="margin-top:0;white-space:nowrap">Start the shift</button></div>
+        <div style="max-width:110px"><button class="act" id="shift-stop" style="margin-top:0;background:none;border:1px solid var(--drape-edge);color:var(--dim);font:11px var(--display);letter-spacing:.16em;text-transform:uppercase;padding:11px 16px;cursor:pointer;border-radius:2px">Stop</button></div>
+      </div>
+      <p class="error" id="shift-error" hidden></p>
+      <ul id="shift-rows"><li class="empty">The shift is dark — no orders on the call sheet. Brief a few and let them fire overnight.</li></ul>
+      <div id="shift-log" hidden></div>
+    </div>
   </section>
 
   <!-- STAGE -->
@@ -500,6 +678,8 @@ document.querySelectorAll('nav [role=tab]').forEach(btn => btn.addEventListener(
   const frame = document.querySelector('#tab-' + btn.dataset.tab + ' iframe');
   if (frame && !frame.src) frame.src = frame.dataset.src;
   if (btn.dataset.tab === 'archive') loadArchive();  // fresh shelves on entry
+  if (btn.dataset.tab === 'rack') loadRack();        // fresh candidates on entry
+  if (btn.dataset.tab === 'nightshift') loadShift(); // fresh call sheet on entry
 }));
 const openTab = name => document.querySelector(`nav [data-tab=${name}]`).click();
 
@@ -512,6 +692,10 @@ function stationState(s) {
          : s.stage_ui.up ? 'held' : 'dark',   // held, not green — a held stage refuses every cue
     foley: !s.foley.installed ? 'dark'
          : s.foley.job_state === 'running' ? 'live' : 'ready',
+    // the fifth plate rides the SAME state machine — no second dialect
+    kiln:  (s.kiln?.job_state === 'running' || s.night_shift?.row_id) ? 'live'
+         : s.stage_ui.up ? 'held'             // the full UI occupies the GPU
+         : s.face_shop.up ? 'ready' : 'dark', // the kiln fires through ComfyUI
   };
 }
 function paintStation(name, state, read) {
@@ -533,6 +717,9 @@ async function poll() {
     paintStation('stage', st.stage, st.stage === 'live' ? (s.stage_job.model || 'mid-take')
       : st.stage === 'held' ? 'the full UI holds :7860' : '');
     paintStation('foley', st.foley, st.foley === 'live' ? 'scoring' : '');
+    paintStation('kiln', st.kiln, st.kiln === 'live'
+      ? (s.night_shift?.subject || s.kiln?.subject || 'firing')
+      : st.kiln === 'held' ? 'the full UI holds the GPU' : '');
     document.body.classList.toggle('take-running', Object.values(st).includes('live'));
     if (s.face_shop.up) {
       const {vram_free_gb: free, vram_total_gb: total} = s.face_shop;
@@ -546,7 +733,7 @@ async function poll() {
   } catch {
     board.classList.add('cold');
     document.body.classList.remove('take-running');
-    ['forge', 'face', 'stage', 'foley'].forEach(n => paintStation(n, 'dark', ''));
+    ['forge', 'face', 'stage', 'foley', 'kiln'].forEach(n => paintStation(n, 'dark', ''));
     $('occ-fill').style.width = '0';
     $('occ-read').textContent = '—';
   }
@@ -1075,6 +1262,330 @@ $('arch-kinds').querySelectorAll('button').forEach(b => b.addEventListener('clic
   renderArchive();
 }));
 loadArchive();
+
+/* ---- the kiln room ---- */
+const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)');
+let kilnPoller = null;
+const resetKilnGo = () => { $('kiln-go').disabled = false; $('kiln-go').textContent = 'Fire it'; };
+$('kiln-go').addEventListener('click', async () => {
+  clearError('kiln-error');
+  const subject = $('kiln-subject').value.trim();
+  if (!subject) return showError('kiln-error', {message: 'The kiln fires nothing from an empty subject — name the prop.'});
+  $('kiln-go').disabled = true; $('kiln-go').textContent = 'Firing…';
+  try {
+    await api('/api/kiln/generate', {
+      subject,
+      octree: +$('kiln-octree').value || 128,
+      threshold: +$('kiln-threshold').value || 0.5,
+      two_sided: $('kiln-two-sided').checked,
+      seed: $('kiln-seed').value === '' ? undefined : +$('kiln-seed').value,
+    });
+    $('kiln-result').innerHTML = ''; $('kiln-log').hidden = false;
+    watchKiln();
+  } catch (e) { resetKilnGo(); showError('kiln-error', e); }
+});
+function watchKiln() {
+  clearInterval(kilnPoller);
+  let misses = 0;
+  kilnPoller = setInterval(async () => {
+    let job;
+    try { job = await api('/api/kiln/job'); misses = 0; }
+    catch {
+      if (++misses < 3) return;
+      clearInterval(kilnPoller); resetKilnGo();
+      return showError('kiln-error', {message: 'The booth lost sight of the kiln — the server stopped answering. Reload to reconnect; the firing may still land on the Curing Rack.'});
+    }
+    $('kiln-log').textContent = (job.log_tail || []).join('\n');
+    $('kiln-log').scrollTop = $('kiln-log').scrollHeight;
+    if (job.state === 'running') return;
+    clearInterval(kilnPoller); resetKilnGo();
+    if (job.state === 'done' && job.candidate) mountFiring(job.candidate);
+    else if (job.state === 'failed') showError('kiln-error', {message: job.error || 'The firing collapsed — the log above names where.'});
+  }, 3000);
+}
+function mountFiring(c) {
+  // the result card is the turntable well + ONE act — judgment happens on
+  // the Rack, never at the firing bench
+  const host = $('kiln-result'); host.innerHTML = '';
+  const fig = document.createElement('figure'); fig.className = 'mount';
+  const frame = document.createElement('div'); frame.className = 'mount-frame';
+  const img = document.createElement('img');
+  img.src = `/kiln-output/${c.id}/turn/000.png`; img.alt = c.subject;
+  const stamp = document.createElement('span'); stamp.className = 'mount-stamp';
+  stamp.textContent = c.refire_count ? 'Fired · mended' : 'Fired';
+  frame.append(img, stamp);
+  const body = document.createElement('figcaption'); body.className = 'mount-body';
+  const t = document.createElement('p'); t.className = 'mount-title'; t.textContent = c.subject;
+  const chips = document.createElement('div'); chips.className = 'mount-chips';
+  const chipRows = [[`seed ${c.seed}`, 'chip'], [c.orient_hint, 'chip']];
+  chipRows.push(c.refire_count ? [`refired · ${c.octree}`, 'chip scar'] : [`octree ${c.octree}`, 'chip']);
+  if (c.two_sided) chipRows.push(['two-sided', 'chip']);
+  chipRows.forEach(([text, cls]) => {
+    const s = document.createElement('span'); s.className = cls; s.textContent = text;
+    chips.appendChild(s);
+  });
+  const row = document.createElement('div'); row.className = 'mount-acts';
+  const b = document.createElement('button'); b.className = 'act';
+  b.textContent = '→ On the Curing Rack';
+  b.addEventListener('click', () => openTab('rack'));
+  row.appendChild(b);
+  body.append(t, chips, row); fig.append(frame, body); host.appendChild(fig);
+}
+api('/api/kiln/job').then(j => {
+  if (j.state === 'running') {
+    $('kiln-log').hidden = false;
+    $('kiln-go').disabled = true; $('kiln-go').textContent = 'Firing…';
+    watchKiln();
+  }
+}).catch(() => {});
+
+/* ---- the curing rack ---- */
+const seenScars = new Set();   // candidates whose ember scar already flared
+let rackSpinTimer = null, rackSpinFrame = 0;
+async function loadRack() {
+  clearError('rack-error');
+  try { renderRack((await api('/api/rack/list')).candidates); }
+  catch (e) { showError('rack-error', e); }
+}
+function qaVerdict(entry) {
+  if (!entry.qa) return {cls: 'curing', word: 'CURING…'};
+  return entry.qa.passed ? {cls: 'cured', word: 'CURED'} : {cls: 'tattered', word: 'TATTERED'};
+}
+function qaLine(entry) {
+  const r = entry.recipe, qa = entry.qa;
+  if (r.refire_count > 0 && qa && qa.passed)
+    return `the silhouette tattered — the refire at ${r.octree} closed it.`;
+  if (r.refire_count > 0 && (r.shredding_detected || (qa && !qa.passed)))
+    return 'still tattering after refire — needs a look.';
+  if (qa && !qa.passed) return qa.failure_reason;
+  return '';
+}
+function cardError(card, message) {
+  let el = card.querySelector('.error');
+  if (!el) {
+    el = document.createElement('p'); el.className = 'error';
+    card.querySelector('.body').appendChild(el);
+  }
+  el.textContent = message; el.hidden = false;
+}
+function renderRack(candidates) {
+  const host = $('rack-grid'); host.innerHTML = '';
+  const pending = (candidates || []).filter(c => c.recipe.status === 'pending');
+  if (!pending.length) {
+    host.innerHTML = '<p class="empty">Nothing curing right now — fire a prop or brief the Night Shift.</p>';
+    return;
+  }
+  pending.forEach(entry => {
+    const r = entry.recipe;
+    const card = document.createElement('article');
+    card.className = 'canister candidate';
+    card.dataset.id = entry.id;
+    // the Mend: a refired candidate's scar flares once, the first time it deals in
+    if (r.refire_count > 0 && !seenScars.has(entry.id)) {
+      card.classList.add('mended'); seenScars.add(entry.id);
+    }
+    const well = document.createElement('div'); well.className = 'well';
+    if (entry.frames?.length) {
+      const img = document.createElement('img'); img.className = 'spin';
+      img.dataset.frames = JSON.stringify(entry.frames);
+      img.src = '/kiln-output/' + entry.frames[0];
+      img.alt = r.canister_label || r.subject;
+      well.appendChild(img);
+    } else {
+      const ph = document.createElement('span'); ph.className = 'no-spin'; ph.textContent = '◌';
+      well.appendChild(ph);
+    }
+    const verdict = qaVerdict(entry);
+    const badge = document.createElement('span'); badge.className = 'qa-badge ' + verdict.cls;
+    badge.textContent = verdict.word;
+    well.appendChild(badge);
+    const body = document.createElement('div'); body.className = 'body';
+    const title = document.createElement('p'); title.className = 'title';
+    title.textContent = r.canister_label || r.subject;
+    const chips = document.createElement('div'); chips.className = 'chips';
+    const chip = (text, cls = 'chip') => {
+      const s = document.createElement('span'); s.className = cls; s.textContent = text;
+      chips.appendChild(s);
+    };
+    chip(r.orient_hint);
+    if (r.refire_count > 0) chip(`refired · ${r.octree}`, 'chip scar');
+    else chip(`octree ${r.octree}`);
+    chip(`seed ${r.seed}`);
+    if (r.two_sided) chip('two-sided');
+    body.append(title, chips);
+    const line = qaLine(entry);
+    if (line) {
+      const q = document.createElement('p'); q.className = 'qa-line'; q.textContent = line;
+      body.appendChild(q);
+    }
+    const acts = document.createElement('div'); acts.className = 'acts';
+    const approve = document.createElement('button'); approve.className = 'fire';
+    approve.textContent = 'Approve';
+    const refire = document.createElement('button'); refire.className = 'act';
+    refire.textContent = 'Refire';
+    approve.addEventListener('click', () => showApproveRow(card, entry));
+    refire.addEventListener('click', () => showRefireRow(card, entry));
+    acts.append(approve, refire);
+    body.appendChild(acts);
+    card.append(well, body);
+    host.appendChild(card);
+  });
+  startRackSpin();
+}
+function startRackSpin() {
+  clearInterval(rackSpinTimer);
+  const spins = [...document.querySelectorAll('#rack-grid img.spin')];
+  if (!spins.length) return;
+  const setFrame = n => spins.forEach(img => {
+    const frames = JSON.parse(img.dataset.frames);
+    img.src = '/kiln-output/' + frames[n % frames.length];
+  });
+  if (REDUCED_MOTION.matches) return setFrame(0);  // freeze on angle 0
+  rackSpinTimer = setInterval(() => {
+    rackSpinFrame = (rackSpinFrame + 1) % 8;
+    setFrame(rackSpinFrame);
+  }, 125);  // ~8 fps — the QA render IS the preview, one pass, two consumers
+}
+REDUCED_MOTION.addEventListener('change', startRackSpin);
+const slugify = text => (text || '').toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'prop';
+function showApproveRow(card, entry) {
+  if (card.querySelector('.approve-row')) return;
+  card.querySelector('.refire-row')?.parentElement?.querySelectorAll('.refire-row, .refire-note')
+    .forEach(el => el.remove());
+  const row = document.createElement('div'); row.className = 'approve-row';
+  const input = document.createElement('input'); input.type = 'text';
+  input.value = slugify(entry.recipe.canister_label || entry.recipe.subject);
+  const go = document.createElement('button'); go.className = 'fire';
+  go.style.marginTop = '0'; go.textContent = 'Shelve it';
+  row.append(input, go);
+  card.querySelector('.body').appendChild(row);
+  input.addEventListener('input', () => {
+    input.style.borderColor = /^[a-z0-9-]+$/.test(input.value.trim()) ? '' : 'var(--tattered)';
+  });
+  go.addEventListener('click', async () => {
+    const name = input.value.trim();
+    if (!/^[a-z0-9-]+$/.test(name))
+      return cardError(card, `'${name}' will not survive the packer — lowercase letters, digits, and dashes only.`);
+    try {
+      await api('/api/rack/approve', {candidate_id: entry.id, pack_name: name});
+      loadRack();
+    } catch (e) { cardError(card, e.message); }
+  });
+}
+function showRefireRow(card, entry) {
+  if (card.querySelector('.refire-row')) return;
+  card.querySelector('.approve-row')?.remove();
+  const row = document.createElement('div'); row.className = 'refire-row';
+  const oct = document.createElement('input'); oct.type = 'number';
+  oct.value = 224; oct.step = 16; oct.title = 'octree';
+  const thr = document.createElement('input'); thr.type = 'number';
+  thr.value = 0.4; thr.step = 0.05; thr.title = 'threshold';
+  const go = document.createElement('button'); go.className = 'act'; go.textContent = 'Refire';
+  row.append(oct, thr, go);
+  const note = document.createElement('p'); note.className = 'qa-line refire-note';
+  note.textContent = 'Same painting, new firing — a full repaint starts back at the Kiln.';
+  card.querySelector('.body').append(row, note);
+  go.addEventListener('click', async () => {
+    try {
+      await api('/api/rack/refire', {candidate_id: entry.id, octree: +oct.value, threshold: +thr.value});
+      go.textContent = 'Refiring…'; go.disabled = true;
+      const timer = setInterval(async () => {
+        try {
+          const job = await api('/api/kiln/job');
+          if (job.state === 'running') return;
+          clearInterval(timer);
+          loadRack();  // the mended candidate deals in with its ember scar
+        } catch { clearInterval(timer); }
+      }, 3000);
+    } catch (e) { cardError(card, e.message); }
+  });
+}
+
+/* ---- the night shift ---- */
+let shiftPoller = null;
+async function loadShift() {
+  clearError('shift-error');
+  try { renderShift(await api('/api/queue/list')); }
+  catch (e) { return showError('shift-error', e); }
+  clearInterval(shiftPoller);
+  shiftPoller = setInterval(async () => {
+    if ($('tab-nightshift').hidden) return clearInterval(shiftPoller);
+    try { renderShift(await api('/api/queue/list')); } catch { /* next tick retries */ }
+  }, 3000);
+}
+function renderShift({rows, shift, log_tail}) {
+  const host = $('shift-rows'); host.innerHTML = '';
+  if (!rows.length) {
+    host.innerHTML = '<li class="empty">The shift is dark — no orders on the call sheet. Brief a few and let them fire overnight.</li>';
+  }
+  rows.forEach(r => {
+    const li = document.createElement('li'); li.className = 'order'; li.dataset.status = r.status;
+    const eye = document.createElement('i'); eye.className = 'eye';
+    const st = document.createElement('span'); st.className = 'status'; st.textContent = r.status;
+    const subj = document.createElement('span'); subj.className = 'subject';
+    subj.textContent = Array.isArray(r.subject) ? r.subject.join(' · ') : r.subject;
+    subj.title = subj.textContent;
+    const k = document.createElement('span'); k.className = 'k'; k.textContent = '×' + r.variant_count;
+    const prog = document.createElement('span'); prog.className = 'progress';
+    prog.textContent = r.status === 'queued' ? '—'
+      : `take ${Math.min(r.takes_done + (r.status === 'firing' ? 1 : 0), r.variant_count)}/${r.variant_count}`;
+    li.append(eye, st, subj, k, prog);
+    if (r.status === 'failed' && r.reason) {
+      const reason = document.createElement('span'); reason.className = 'reason';
+      reason.textContent = r.reason; reason.title = r.reason;
+      li.appendChild(reason);
+    }
+    const handles = document.createElement('span'); handles.className = 'handles';
+    const handle = (label, fn) => {
+      const b = document.createElement('button'); b.className = 'act'; b.textContent = label;
+      b.addEventListener('click', async () => {
+        clearError('shift-error');
+        try { await fn(); loadShift(); } catch (e) { showError('shift-error', e); }
+      });
+      handles.appendChild(b);
+    };
+    handle('↑', () => api('/api/queue/reorder', {row_id: r.id, direction: 'up'}));
+    handle('↓', () => api('/api/queue/reorder', {row_id: r.id, direction: 'down'}));
+    handle('remove', () => api('/api/queue/remove', {row_id: r.id}));
+    li.appendChild(handles);
+    host.appendChild(li);
+  });
+  if (log_tail?.length) {
+    $('shift-log').hidden = false;
+    $('shift-log').textContent = log_tail.join('\n');
+    $('shift-log').scrollTop = $('shift-log').scrollHeight;
+  }
+  $('shift-start').textContent = shift.running ? 'The shift is on the floor' : 'Start the shift';
+  $('shift-start').disabled = !!shift.running;
+}
+$('shift-add').addEventListener('click', async () => {
+  clearError('shift-error');
+  const raw = $('shift-subject').value.trim();
+  if (!raw) return showError('shift-error', {message: 'An order needs a subject — the kiln fires nothing from an empty phrase.'});
+  // both grammars: semicolons list K distinct phrases; otherwise K seed-varied takes
+  const phrases = raw.split(';').map(s => s.trim()).filter(Boolean);
+  try {
+    await api('/api/queue/add', {
+      subject: phrases.length > 1 ? phrases : raw,
+      variant_count: phrases.length > 1 ? phrases.length : (+$('shift-k').value || 1),
+      job_type: 'kiln',
+      two_sided: $('shift-two-sided').checked,
+    });
+    $('shift-subject').value = '';
+    loadShift();
+  } catch (e) { showError('shift-error', e); }
+});
+$('shift-start').addEventListener('click', async () => {
+  clearError('shift-error');
+  try { await api('/api/queue/start', {}); loadShift(); }
+  catch (e) { showError('shift-error', e); }
+});
+$('shift-stop').addEventListener('click', async () => {
+  clearError('shift-error');
+  try { await api('/api/queue/stop', {}); loadShift(); }
+  catch (e) { showError('shift-error', e); }
+});
 
 /* ---- foley booth ---- */
 let foleyPoller = null;

@@ -18,3 +18,13 @@
 /outputs/
 __pycache__/
 /jobs/prompter-*.json
+/jobs/kiln-*.json
+
+# The Kiln Room's working shelves — candidates cure and pack on the bench,
+# never in the blueprint. The Scientist's pack step carries approved pairs
+# into town-sketches by hand (experiment log #00062's artifact geography).
+/prompter-box/kiln-output/
+/prompter-box/pack-queue/
+/prompter-box/night-shift-queue.json
+/prompter-box/tests/__pycache__/
+.pytest_cache/

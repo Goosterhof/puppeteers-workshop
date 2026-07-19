@@ -1,0 +1,15 @@
+# The bench's mesh tooling — the Workshop's first Python mesh dependencies,
+# installed into the ComfyUI machine venv (the booth's stdlib rule stands for
+# the instruments themselves; the Keymaster precedent extends here):
+#
+#   uv pip install --python ComfyUI/.venv/bin/python -r prompter-box/requirements.txt
+#
+# trimesh   — GLB load, voxel + island geometry checks (the Turntable's maths)
+# pyrender  — headless offscreen turntable renders via EGL (no display, no browser)
+# pytest    — the containment suite (prompter-box/tests/, fixture-driven, no GPU)
+#
+# numpy / Pillow / scipy are NOT listed: every machine venv on the floor
+# already carries them (the Keymaster's substrate).
+trimesh
+pyrender
+pytest

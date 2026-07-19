@@ -13,7 +13,6 @@ import json
 import mimetypes
 import os
 import shutil
-import socket
 import struct
 import subprocess
 import sys
@@ -21,12 +20,19 @@ import threading
 import time
 import urllib.error
 import urllib.parse
-import urllib.request
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent.parent  # video-lab/
+# The crew musters in stagehands.py — the SAME fail-closed guard for every
+# station (Forge, Face Shop, Stage, Foley, Kiln, Night Shift). One guard,
+# many callers, zero copies to drift.
+from stagehands import (  # noqa: F401  (re-exported names other rooms rely on)
+    BASE, COMFY, COMFY_IN, COMFY_OUT, OLLAMA, WAN_UI_PORT,
+    clear_the_set, evict_llms, gpu_vram_free_gb, http_json,
+    loaded_llms, port_open, ram_available_gb,
+)
+
 STATIC = Path(__file__).resolve().parent / "static"
 FOOTAGE = BASE / "footage"
 JOBS = BASE / "jobs"
@@ -38,21 +44,20 @@ WAN_DEFAULTS = WAN_DIR / "defaults"
 WAN_SETTINGS = WAN_DIR / "settings"
 WAN_CKPTS = WAN_DIR / "ckpts"
 WAN_LORAS = WAN_DIR / "loras"
-COMFY_OUT = BASE / "ComfyUI" / "output"
-COMFY_IN = BASE / "ComfyUI" / "input"
 COMFY_PAINTERS = BASE / "ComfyUI" / "models" / "diffusion_models"
 MM_DIR = BASE / "MMAudio"
 MM_PY = MM_DIR / ".venv" / "bin" / "python"
 MM_OUT = MM_DIR / "output" / "prompter"
 FF_SHARED = BASE / "ffmpeg-shared" / "lib"  # torchcodec's substrate — see the runbook
 
-OLLAMA = "http://localhost:11434"
-COMFY = "http://localhost:8188"
-WAN_UI_PORT = 7860
 PORT = 7900
 
 sys.path.insert(0, str(BASE / "prompt-forge"))
 from promptsmith import DEFAULT_MODEL, FORGE_PROFILES, VISION_MODEL, forge  # noqa: E402
+
+import kiln  # noqa: E402  — the firing chain + the Curing Rack's tray
+import night_shift  # noqa: E402  — the overnight call sheet (blueprint file: night_shift.py)
+from turntable import turntable_qa  # noqa: E402  — one instrument, two consumers
 
 # The house lead — the arc-proven Wan 2.2 i2v Enhanced Lightning recipe
 # (jobs/crier-bell-14b.json). Other performers join the playbill dynamically:
@@ -199,100 +204,73 @@ stage_job = {"state": "idle"}  # idle | running | done | failed
 foley_lock = threading.Lock()
 foley_job = {"state": "idle"}  # idle | running | done | failed
 
+kiln_lock = threading.Lock()
+kiln_job = {"state": "idle"}   # idle | running | done | failed
+shift_log = {"name": None}     # the Night Shift's current log reel
 
-def http_json(url, payload=None, timeout=10):
-    data = json.dumps(payload).encode() if payload is not None else None
-    req = urllib.request.Request(
-        url, data=data, headers={"Content-Type": "application/json"} if data else {}
+
+def stations_clear():
+    """The Night Shift's door check — the floor must be free before a row
+    lights. This is the SAME containment every station lives under: no
+    Stage or Foley take mid-performance, no Kiln-tab firing, no full UI
+    holding the GPU. VRAM residency itself is struck by clear_the_set at
+    every swap boundary inside the firing chain."""
+    return (stage_job.get("state") != "running"
+            and foley_job.get("state") != "running"
+            and kiln_job.get("state") != "running"
+            and not port_open(WAN_UI_PORT))
+
+
+def kiln_log_writer(log_path):
+    def say(msg):
+        with open(log_path, "a") as fh:
+            fh.write(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}\n")
+    return say
+
+
+def run_kiln_job(work, log_path):
+    """Background body for a Kiln firing or a Rack refire — mirrors
+    run_stage_job's shape: state dict, log reel, voiced failure."""
+    global kiln_job
+    say = kiln_log_writer(log_path)
+    try:
+        result = work(say)
+        kiln_job.update({"state": "done", **result,
+                         "finished": datetime.now().isoformat(timespec="seconds")})
+    except (kiln.KilnColdError, kiln.KilnRefusal, kiln.RackRefusal) as e:
+        say(str(e))
+        kiln_job.update({"state": "failed", "error": str(e),
+                         "finished": datetime.now().isoformat(timespec="seconds")})
+    except Exception as e:  # a firing must never die silently overnight
+        say(f"the kiln cracked unexpectedly: {e!r}")
+        kiln_job.update({"state": "failed",
+                         "error": f"The kiln cracked unexpectedly — {e}. The log reel has the shard.",
+                         "finished": datetime.now().isoformat(timespec="seconds")})
+
+
+def night_shift_take(row, _take_index, subject, seed):
+    """One Night Shift take = the full Kiln chain + the Turntable's appraisal,
+    exactly as a manual firing — the Rack cannot tell them apart."""
+    say = kiln_log_writer(JOB_LOGS / shift_log["name"]) if shift_log["name"] else (lambda _m: None)
+    result = kiln.kiln_fire(
+        subject,
+        octree=int(row.get("octree", 128)),
+        threshold=float(row.get("threshold", 0.5)),
+        two_sided=bool(row.get("two_sided", False)),
+        seed=seed,
+        clear_set=clear_the_set,
+        log=say,
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        body = resp.read()
-    return json.loads(body) if body.strip() else {}
+    kiln.appraise_candidate(result.id, clear_set=clear_the_set)
+    return result
 
 
-def port_open(port):
-    with socket.socket() as s:
-        s.settimeout(0.3)
-        return s.connect_ex(("127.0.0.1", port)) == 0
-
-
-def loaded_llms():
-    try:
-        return http_json(f"{OLLAMA}/api/ps", timeout=2).get("models", [])
-    except OSError:
-        return None  # forge is cold
-
-
-def evict_llms():
-    """Clear the booth's own models off the GPU before a performance."""
-    evicted = []
-    for m in loaded_llms() or []:
-        try:
-            http_json(
-                f"{OLLAMA}/api/generate", {"model": m["model"], "keep_alive": 0}, timeout=30
-            )
-            evicted.append(m["model"])
-        except OSError:
-            pass
-    return evicted
-
-
-def gpu_vram_free_gb():
-    """VRAM truth straight from the driver — ComfyUI's self-report lags."""
-    try:
-        out = subprocess.run(
-            ["nvidia-smi", "--query-gpu=memory.total,memory.used", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=5,
-        )
-        total, used = (int(v.strip()) for v in out.stdout.strip().split(","))
-        return (total - used) / 1024
-    except (OSError, ValueError):
-        return None
-
-
-def ram_available_gb():
-    try:
-        for line in open("/proc/meminfo"):
-            if line.startswith("MemAvailable"):
-                return int(line.split()[1]) / 1048576
-    except OSError:
-        pass
-    return None
-
-
-def clear_the_set(min_vram_gb, wait_s=30):
-    """Ask ComfyUI to strike its set, then VERIFY the GPU is actually clear.
-
-    Returns (ok, vram_free_gb). FAIL-CLOSED by design: callers must refuse
-    the cue when ok is False. Proceeding anyway makes Ollama offload ~10 GB
-    into system RAM on top of ComfyUI's ~21 GB weight cache — that exact
-    stampede OOM-killed the 31 GB WSL VM twice on 2026-07-09 and took the
-    GPU bridge (dxg) down with it.
-    """
-    free = gpu_vram_free_gb()
-    if free is None or free >= min_vram_gb:
-        return True, free
-    try:
-        http_json(f"{COMFY}/free", {"unload_models": True, "free_memory": True}, timeout=5)
-        # The /free flags are only consumed when the prompt worker wakes from
-        # q.get(timeout=1000) — idle for >10 s, that's up to 16 minutes away.
-        # Knock: a 1-pixel no-op prompt wakes the worker, executes in
-        # milliseconds, and the flags are read right after it completes.
-        knock = {
-            "1": {"class_type": "EmptyImage",
-                  "inputs": {"width": 16, "height": 16, "batch_size": 1, "color": 0}},
-            "2": {"class_type": "PreviewImage", "inputs": {"images": ["1", 0]}},
-        }
-        http_json(f"{COMFY}/prompt", {"prompt": knock}, timeout=5)
-    except OSError:
-        pass  # Face Shop dark — whatever holds the GPU, it is not ComfyUI
-    deadline = time.time() + wait_s
-    while time.time() < deadline:
-        time.sleep(1)
-        free = gpu_vram_free_gb()
-        if free is None or free >= min_vram_gb:
-            return True, free
-    return False, free
+def start_night_shift():
+    """Put the shift on the floor with the booth's own wiring."""
+    JOB_LOGS.mkdir(parents=True, exist_ok=True)
+    shift_log["name"] = f"night-shift-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
+    say = kiln_log_writer(JOB_LOGS / shift_log["name"])
+    return night_shift.start_shift(night_shift_take, stations_clear, log=say)
 
 
 DEFAULT_PAINTER = "flux-2-klein-9b-BF16.gguf"
@@ -572,8 +550,16 @@ class BoothWindow(BaseHTTPRequestHandler):
             return self.send_file(WAN_OUT, path[len("/stage-output/"):])
         if path.startswith("/foley-output/"):
             return self.send_file(MM_OUT, path[len("/foley-output/"):])
+        if path.startswith("/kiln-output/"):
+            return self.send_file(kiln.KILN_OUT, path[len("/kiln-output/"):])
         if path == "/api/status":
             return self.api_status()
+        if path == "/api/kiln/job":
+            return self.api_kiln_job()
+        if path == "/api/rack/list":
+            return self.api_rack_list()
+        if path == "/api/queue/list":
+            return self.api_queue_list()
         if path == "/api/archive":
             return self.api_archive()
         if path == "/api/footage":
@@ -606,6 +592,15 @@ class BoothWindow(BaseHTTPRequestHandler):
             "/api/stage/generate": self.api_stage_generate,
             "/api/stage/cast": self.api_stage_cast,
             "/api/foley/generate": self.api_foley_generate,
+            "/api/kiln/generate": self.api_kiln_generate,
+            "/api/rack/approve": self.api_rack_approve,
+            "/api/rack/refire": self.api_rack_refire,
+            "/api/turntable/run": self.api_turntable_run,
+            "/api/queue/add": self.api_queue_add,
+            "/api/queue/remove": self.api_queue_remove,
+            "/api/queue/reorder": self.api_queue_reorder,
+            "/api/queue/start": self.api_queue_start,
+            "/api/queue/stop": self.api_queue_stop,
         }.get(self.path)
         if not route:
             return self.fail("The booth has no such window.", 404)
@@ -631,6 +626,10 @@ class BoothWindow(BaseHTTPRequestHandler):
             "stage_job": {k: v for k, v in stage_job.items() if k != "pid"},
             "foley": {"installed": MM_PY.exists(),
                       "job_state": foley_job.get("state", "idle")},
+            "kiln": {"job_state": kiln_job.get("state", "idle"),
+                     "act": kiln_job.get("act"),
+                     "subject": kiln_job.get("subject")},
+            "night_shift": night_shift.shift_status(),
         })
 
     def api_archive(self):
@@ -1008,6 +1007,191 @@ class BoothWindow(BaseHTTPRequestHandler):
             info["log_tail"] = tail_lines(JOB_LOGS / info["log"])
         self.reply(info)
 
+    # -- the kiln room (fire a prop from a sentence) ---------------------
+    def kiln_floor_is_busy(self):
+        """One voiced refusal for every reason the kiln cannot light."""
+        if stage_job.get("state") == "running":
+            return "The Stage is mid-performance — the GPU cannot serve two masters. Wait for the take to finish."
+        if foley_job.get("state") == "running":
+            return "The Foley Booth is mid-take — the GPU cannot serve two masters. Wait for the score to land."
+        if port_open(WAN_UI_PORT):
+            return "The Wan2GP UI is holding the stage on :7860 — close it, then fire again."
+        if night_shift.shift_status().get("row_id"):
+            return "The Night Shift is mid-firing — the kiln serves one order at a time. Stop the shift or wait for the row."
+        return None
+
+    def api_kiln_generate(self, p):
+        global kiln_job
+        subject = (p.get("subject") or "").strip()
+        if not subject:
+            return self.fail("The kiln fires nothing from an empty subject — name the prop.")
+        if (busy := self.kiln_floor_is_busy()):
+            return self.fail(busy, 409)
+        if not kiln_lock.acquire(blocking=False):
+            return self.fail("The kiln is mid-firing — one prop at a time.", 409)
+        try:
+            if kiln_job.get("state") == "running":
+                return self.fail("The kiln is mid-firing — one prop at a time.", 409)
+            evicted = evict_llms()
+            ok, free = clear_the_set(min_vram_gb=kiln.PAINT_VRAM_GB)
+            if not ok:
+                return self.fail(
+                    f"The stagehands could not clear the GPU for the kiln — {free:.1f} GB "
+                    f"free, {kiln.PAINT_VRAM_GB} needed. Give the Face Shop a moment to "
+                    "strike its set and fire again.", 503)
+            octree = int(p.get("octree", kiln.DEFAULT_OCTREE))
+            threshold = float(p.get("threshold", kiln.DEFAULT_THRESHOLD))
+            two_sided = bool(p.get("two_sided", False))
+            seed = int(p["seed"]) if p.get("seed") not in (None, "") else None
+            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            JOB_LOGS.mkdir(parents=True, exist_ok=True)
+            # kiln-*.json: a deliberate namespace break from prompter-*.json —
+            # future Canisters tooling tells firings from takes without opening bodies.
+            record = JOBS / f"kiln-{stamp}.json"
+            record.write_text(json.dumps({"subject": subject, "octree": octree,
+                                          "threshold": threshold, "two_sided": two_sided,
+                                          "seed": seed}, indent=1))
+            log_path = JOB_LOGS / f"kiln-{stamp}.log"
+
+            def work(say):
+                result = kiln.kiln_fire(subject, octree=octree, threshold=threshold,
+                                        two_sided=two_sided, seed=seed,
+                                        clear_set=clear_the_set, log=say)
+                say("the turntable takes it — checking, grounding, labeling")
+                kiln.appraise_candidate(result.id, clear_set=clear_the_set)
+                return {"candidate": result.to_dict()}
+
+            kiln_job = {"state": "running", "act": "fire", "subject": subject,
+                        "started": datetime.now().isoformat(timespec="seconds"),
+                        "settings": record.name, "log": log_path.name}
+            threading.Thread(target=run_kiln_job, args=(work, log_path), daemon=True).start()
+            self.reply({"state": "running", "settings": record.name, "evicted": evicted})
+        finally:
+            kiln_lock.release()
+
+    def api_kiln_job(self):
+        info = {k: v for k, v in kiln_job.items() if k != "pid"}
+        if info.get("log"):
+            info["log_tail"] = tail_lines(JOB_LOGS / info["log"])
+        self.reply(info)
+
+    # -- the curing rack (nothing ships without a thumb) -----------------
+    def api_rack_list(self):
+        self.reply({"candidates": kiln.rack_list()})
+
+    def api_rack_approve(self, p):
+        try:
+            self.reply(kiln.rack_approve((p.get("candidate_id") or "").strip(),
+                                         p.get("pack_name")))
+        except kiln.RackRefusal as e:
+            self.fail(str(e), 409)
+
+    def api_rack_refire(self, p):
+        global kiln_job
+        candidate_id = (p.get("candidate_id") or "").strip()
+        recipe = kiln.read_recipe(candidate_id)
+        if recipe is None:
+            return self.fail(f"No candidate '{candidate_id}' is curing on the rack.", 404)
+        if (busy := self.kiln_floor_is_busy()):
+            return self.fail(busy, 409)
+        if not kiln_lock.acquire(blocking=False):
+            return self.fail("The kiln is mid-firing — one prop at a time.", 409)
+        try:
+            if kiln_job.get("state") == "running":
+                return self.fail("The kiln is mid-firing — one prop at a time.", 409)
+            evicted = evict_llms()
+            octree = int(p.get("octree", kiln.REFIRE_OCTREE))
+            threshold = float(p.get("threshold", kiln.REFIRE_THRESHOLD))
+            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            JOB_LOGS.mkdir(parents=True, exist_ok=True)
+            log_path = JOB_LOGS / f"kiln-{stamp}.log"
+
+            def work(say):
+                new_id = kiln.rack_refire(candidate_id, octree, threshold,
+                                          clear_set=clear_the_set, log=say)
+                say("the turntable takes the refire — checking, grounding, labeling")
+                kiln.appraise_candidate(new_id, clear_set=clear_the_set)
+                return {"refired": candidate_id, "candidate_id": new_id}
+
+            kiln_job = {"state": "running", "act": "refire",
+                        "subject": recipe.get("subject"),
+                        "started": datetime.now().isoformat(timespec="seconds"),
+                        "log": log_path.name}
+            threading.Thread(target=run_kiln_job, args=(work, log_path), daemon=True).start()
+            self.reply({"state": "running", "evicted": evicted})
+        finally:
+            kiln_lock.release()
+
+    def api_turntable_run(self, p):
+        """Manual Turntable re-run from the Rack — the same instrument the
+        Kiln's shred gate uses (`turntable_qa`, via appraise_candidate)."""
+        global kiln_job
+        candidate_id = (p.get("candidate_id") or "").strip()
+        recipe = kiln.read_recipe(candidate_id)
+        if recipe is None:
+            return self.fail(f"No candidate '{candidate_id}' is curing on the rack.", 404)
+        if (busy := self.kiln_floor_is_busy()):
+            return self.fail(busy, 409)
+        if not kiln_lock.acquire(blocking=False):
+            return self.fail("The kiln is mid-firing — one prop at a time.", 409)
+        try:
+            if kiln_job.get("state") == "running":
+                return self.fail("The kiln is mid-firing — one prop at a time.", 409)
+            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            JOB_LOGS.mkdir(parents=True, exist_ok=True)
+            log_path = JOB_LOGS / f"kiln-{stamp}.log"
+
+            def work(say):
+                say(f"the turntable takes {candidate_id} for a fresh spin")
+                qa = kiln.appraise_candidate(candidate_id, clear_set=clear_the_set)
+                return {"candidate_id": candidate_id, "qa": qa.to_dict()}
+
+            kiln_job = {"state": "running", "act": "appraise",
+                        "subject": recipe.get("subject"),
+                        "started": datetime.now().isoformat(timespec="seconds"),
+                        "log": log_path.name}
+            threading.Thread(target=run_kiln_job, args=(work, log_path), daemon=True).start()
+            self.reply({"state": "running"})
+        finally:
+            kiln_lock.release()
+
+    # -- the night shift (brief it before bed) ---------------------------
+    def api_queue_list(self):
+        info = {"rows": night_shift.load_queue(), "shift": night_shift.shift_status()}
+        if shift_log["name"]:
+            info["log_tail"] = tail_lines(JOB_LOGS / shift_log["name"])
+        self.reply(info)
+
+    def api_queue_add(self, p):
+        try:
+            self.reply({"row": night_shift.add_row(p.get("row") or p)})
+        except night_shift.CallSheetError as e:
+            self.fail(str(e))
+
+    def api_queue_remove(self, p):
+        try:
+            night_shift.remove_row((p.get("row_id") or "").strip())
+            self.reply({"removed": p.get("row_id")})
+        except night_shift.CallSheetError as e:
+            self.fail(str(e), 404)
+
+    def api_queue_reorder(self, p):
+        try:
+            night_shift.reorder_row((p.get("row_id") or "").strip(),
+                                    p.get("direction") or "up")
+            self.reply({"rows": night_shift.load_queue()})
+        except night_shift.CallSheetError as e:
+            self.fail(str(e), 404)
+
+    def api_queue_start(self, _p):
+        ok, msg = start_night_shift()
+        if not ok:
+            return self.fail(msg, 409)
+        self.reply({"state": "running", "message": msg})
+
+    def api_queue_stop(self, _p):
+        self.reply(night_shift.stop_shift())
+
 
 def split_variants(text):
     """Split '1. ...\n2. ...' forge output into a list; fall back to whole text."""
@@ -1027,4 +1211,10 @@ def split_variants(text):
 
 if __name__ == "__main__":
     print(f"The Prompter's Box opens its window on http://localhost:{PORT}")
+    if night_shift.has_firing_row():
+        # The shift died mid-row — resume from the row's takes_done cursor,
+        # never the whole queue, never a duplicate take.
+        ok, msg = start_night_shift()
+        print(f"A Night Shift row was mid-firing when the booth went dark — {msg.lower()}"
+              if ok else f"Night Shift resume refused: {msg}")
     ThreadingHTTPServer(("0.0.0.0", PORT), BoothWindow).serve_forever()

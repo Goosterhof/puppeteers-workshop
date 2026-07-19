@@ -36,12 +36,16 @@ bump the lab's ref (submodule discipline).
 | **The Promptsmith** | `prompt-forge/promptsmith.py` | Generation-prompt forge on local Ollama models — `qwen3:14b` text, `qwen3-vl:8b` with `--image` (reads the stillness inventory off the actual pixels) |
 | **The Framewright** | `crop-tool/croptool.py` | Exact-resolution cropper with Wan presets — resolution discipline is the whole game in motion transfer |
 | **The Keymaster** | `prompter-box/keymaster.py` | Topology-aware background keying for illustrated takes — only border-connected regions (or `--min-island` pockets) are keyed, so a scroll face can never be eaten the way plain colorkey ate the TC-0057 wax seals; outputs multiply-ready VP9 WebM. The one instrument excused from the stdlib rule (numpy + Pillow + scipy — run it with a machine venv's python; see the runbook) |
+| **The Kiln Room** (bench graft pending) | `prompter-box/kiln.py` + `turntable.py` + `night_shift.py` + `stagehands.py` | The prop-firing spine (experiment log #00062): a subject phrase becomes a keyed, despilled, +6px-cropped hide and a Hunyuan3D GLB in one chain, with the Turntable's silhouette/voxel/island checks catching shredded thin structures and auto-refiring once at 224/0.4; every firing parks `pending` on the **Curing Rack** (nothing reaches `pack-queue/` without a thumb on Approve) and the **Night Shift** works a persisted call sheet overnight through the SAME `clear_the_set` guard (`stagehands.py` — the guard family extracted from server.py, one definition for every station). qwen3-vl grounds each firing and writes its Canister label. Turntable renders headless via pyrender+EGL; the shared guard rule stands unweakened. Containment: `python -m pytest prompter-box/tests/` (fixture-driven, no GPU; run with the ComfyUI venv python — see `prompter-box/requirements.txt`). Built and green in the blueprint; awaits its graft onto the bench + a live end-to-end firing before DELIVERED. |
 
 ## Conventions
 
 - Stdlib-only Python for the instruments — no venvs of our own; the machines
   carry their own. (The Keymaster is the standing exception: its topology maths
-  need numpy + Pillow + scipy, borrowed from a machine venv's python.)
+  need numpy + Pillow + scipy, borrowed from a machine venv's python. The Kiln
+  Room extends the same exception: `kiln.py`/`turntable.py` add trimesh +
+  pyrender for mesh QA — declared in `prompter-box/requirements.txt`, installed
+  into the ComfyUI venv, run with that venv's python.)
 - Commit scope: `workshop` (see the lab's Commit Doctrine).
 - Gadget containment protocols apply: the Prompter's Box carries the
   `prefers-reduced-motion` floor in its single-page CSS.
