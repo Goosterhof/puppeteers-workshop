@@ -284,6 +284,10 @@
   }
   details.kiln-settings summary:hover { color: var(--lamp); }
   details.kiln-settings .row { margin-top: 10px; }
+  details.kiln-settings .knob-note {
+    margin: 6px 0 0; max-width: 250px;
+    font-size: 11.5px; font-style: italic; color: var(--dim); line-height: 1.55;
+  }
   .sided { display: flex; align-items: center; gap: 8px; margin-top: 12px;
            font-size: 12px; letter-spacing: .06em; }
   .sided input { accent-color: var(--lamp); }
@@ -312,6 +316,18 @@
     font-size: 10.5px; font-style: italic; color: var(--dim); opacity: .85;
   }
   .wheel.spun .wheel-hint { opacity: 0; transition: opacity .6s ease; }
+  /* the rack breaks out of the column — a full shelf earns the whole wall */
+  #tab-rack {
+    --rackw: min(100vw - 64px, 1680px);
+    width: var(--rackw); margin-left: calc((100% - var(--rackw)) / 2);
+  }
+  .candidate .well.shelf { cursor: pointer; }
+  .candidate .well.shelf:hover { box-shadow: inset 0 0 0 1px var(--lamp-dim); }
+  .candidate.spotlit { border-color: var(--lamp); }
+  #rack-view:empty { display: none; }
+  .candidate.spotlight { max-width: 860px; width: 100%; animation: none; }
+  .candidate.spotlight .well { height: min(56vh, 520px); }
+  .candidate.spotlight .well img { width: 100%; height: 100%; object-fit: contain; }
   .qa-badge {
     position: absolute; top: 0; right: 0; z-index: 2;
     font: 11px var(--display); letter-spacing: .2em; text-transform: uppercase; color: var(--ink);
@@ -498,11 +514,20 @@
         <summary>Kiln settings · the defaults are the prop-dressing laws</summary>
         <div class="row">
           <div><label class="field" for="kiln-octree">Octree</label>
-            <input id="kiln-octree" type="number" value="128" min="16" max="512" step="16"></div>
+            <input id="kiln-octree" type="number" value="128" min="16" max="512" step="16">
+            <p class="knob-note">The carving grid — how finely the mesher subdivides space.
+              Higher keeps thin parts (chair legs, spokes) from shredding, but fires slower
+              and the GLB weighs more. A firing that tatters at 128 auto-refires at 224.</p></div>
           <div><label class="field" for="kiln-threshold">Threshold</label>
-            <input id="kiln-threshold" type="number" value="0.5" min="0.1" max="1" step="0.05"></div>
+            <input id="kiln-threshold" type="number" value="0.5" min="0.1" max="1" step="0.05">
+            <p class="knob-note">Where the skin gets drawn in the voxel field. Lower is more
+              generous — thin features survive as material; higher cuts tighter and can eat
+              them. The auto-refire softens to 0.4 for exactly that reason.</p></div>
           <div><label class="field" for="kiln-seed">Seed</label>
-            <input id="kiln-seed" type="number" placeholder="the kiln picks"></div>
+            <input id="kiln-seed" type="number" placeholder="the kiln picks">
+            <p class="knob-note">The dice — one seed steers both the painting and the mesh,
+              so the same subject with the same seed fires the same prop again. Leave it
+              blank and the kiln rolls fresh every firing.</p></div>
         </div>
       </details>
       <button class="fire" id="kiln-go">Fire it</button>
@@ -519,10 +544,12 @@
   <!-- THE CURING RACK -->
   <section id="tab-rack" hidden>
     <div class="panel">
-      <p class="note">Every fired candidate waits here for a verdict. Two buttons, and only
-        two: <b>Approve</b> moves the pair into the pack queue; <b>Refire</b> re-meshes the
+      <p class="note">Every fired candidate waits here for a verdict. Click a piece to put it
+        on the Potter's Wheel — only the piece on the wheel turns in your hand. Two buttons, and
+        only two: <b>Approve</b> moves the pair into the pack queue; <b>Refire</b> re-meshes the
         SAME painting at a new octree. Nothing ships without a thumb on Approve.</p>
       <p class="error" id="rack-error" hidden></p>
+      <div class="result" id="rack-view"></div>
       <div id="rack-grid"></div>
     </div>
   </section>
@@ -1384,10 +1411,15 @@ api('/api/kiln/job').then(j => {
 /* ---- the curing rack ---- */
 const seenScars = new Set();   // candidates whose ember scar already flared
 let rackSpinTimer = null, rackSpinFrame = 0;
+let rackPending = [];   // the pending candidates as last fetched
+let rackSpotId = null;  // the one piece on the Potter's Wheel
 async function loadRack() {
   clearError('rack-error');
-  try { renderRack((await api('/api/rack/list')).candidates); }
-  catch (e) { showError('rack-error', e); }
+  try {
+    rackPending = ((await api('/api/rack/list')).candidates || [])
+      .filter(c => c.recipe.status === 'pending');
+    renderRack();
+  } catch (e) { showError('rack-error', e); }
 }
 function qaVerdict(entry) {
   if (!entry.qa) return {cls: 'curing', word: 'CURING…'};
@@ -1410,78 +1442,106 @@ function cardError(card, message) {
   }
   el.textContent = message; el.hidden = false;
 }
-function renderRack(candidates) {
+function buildRackCard(entry, onWheel) {
+  const r = entry.recipe;
+  const card = document.createElement('article');
+  card.className = 'canister candidate' + (onWheel ? ' spotlight' : '');
+  card.dataset.id = entry.id;
+  // the Mend: a refired candidate's scar flares once, the first time it deals in
+  if (!onWheel && r.refire_count > 0 && !seenScars.has(entry.id)) {
+    card.classList.add('mended'); seenScars.add(entry.id);
+  }
+  const well = document.createElement('div'); well.className = 'well';
+  if (entry.frames?.length) {
+    const img = document.createElement('img');
+    img.className = onWheel ? '' : 'spin';
+    img.dataset.frames = JSON.stringify(entry.frames);
+    img.src = '/kiln-output/' + entry.frames[onWheel ? rackSpinFrame % entry.frames.length : 0];
+    img.alt = r.canister_label || r.subject;
+    well.appendChild(img);
+    if (onWheel) {
+      // only the piece on the wheel turns — mounted at the yaw the shelf was showing
+      well.classList.add('wheel');
+      spinUp(well, entry.id, 2 * Math.PI * (rackSpinFrame % 8) / 8, rackWheels).then(() => {
+        img.remove();
+        const hint = document.createElement('p'); hint.className = 'wheel-hint';
+        hint.textContent = 'take it by the rim — drag to see every side, scroll to lean in';
+        well.appendChild(hint);
+        well.addEventListener('pointerdown', () => well.classList.add('spun'), { once: true });
+      }).catch(() => {});  // the still frame stands if the wheel jams
+    } else {
+      well.classList.add('shelf');
+      well.title = "Put it on the Potter's Wheel";
+      well.addEventListener('click', () =>
+        spotlightRack(entry.id === rackSpotId ? null : entry.id));
+    }
+  } else {
+    const ph = document.createElement('span'); ph.className = 'no-spin'; ph.textContent = '◌';
+    well.appendChild(ph);
+  }
+  const verdict = qaVerdict(entry);
+  const badge = document.createElement('span'); badge.className = 'qa-badge ' + verdict.cls;
+  badge.textContent = verdict.word;
+  well.appendChild(badge);
+  const body = document.createElement('div'); body.className = 'body';
+  const title = document.createElement('p'); title.className = 'title';
+  title.textContent = r.canister_label || r.subject;
+  const chips = document.createElement('div'); chips.className = 'chips';
+  const chip = (text, cls = 'chip') => {
+    const s = document.createElement('span'); s.className = cls; s.textContent = text;
+    chips.appendChild(s);
+  };
+  chip(r.orient_hint);
+  if (r.refire_count > 0) chip(`refired · ${r.octree}`, 'chip scar');
+  else chip(`octree ${r.octree}`);
+  chip(`seed ${r.seed}`);
+  if (r.two_sided) chip('two-sided');
+  body.append(title, chips);
+  const line = qaLine(entry);
+  if (line) {
+    const q = document.createElement('p'); q.className = 'qa-line'; q.textContent = line;
+    body.appendChild(q);
+  }
+  const acts = document.createElement('div'); acts.className = 'acts';
+  const approve = document.createElement('button'); approve.className = 'fire';
+  approve.textContent = 'Approve';
+  const refire = document.createElement('button'); refire.className = 'act';
+  refire.textContent = 'Refire';
+  approve.addEventListener('click', () => showApproveRow(card, entry));
+  refire.addEventListener('click', () => showRefireRow(card, entry));
+  acts.append(approve, refire);
+  if (onWheel) {
+    const off = document.createElement('button'); off.className = 'act';
+    off.textContent = '✕ Off the wheel';
+    off.addEventListener('click', () => spotlightRack(null));
+    acts.appendChild(off);
+  }
+  body.appendChild(acts);
+  card.append(well, body);
+  return card;
+}
+function spotlightRack(id) {
+  rackSpotId = id;
   rackWheels.forEach(h => h.dispose()); rackWheels.clear();
+  const view = $('rack-view'); view.innerHTML = '';
+  const entry = rackPending.find(e => e.id === id);
+  if (entry) view.appendChild(buildRackCard(entry, true));
+  document.querySelectorAll('#rack-grid .candidate').forEach(c =>
+    c.classList.toggle('spotlit', c.dataset.id === id));
+  if (entry) view.scrollIntoView({behavior: REDUCED_MOTION.matches ? 'auto' : 'smooth', block: 'nearest'});
+}
+function renderRack() {
+  rackWheels.forEach(h => h.dispose()); rackWheels.clear();
+  $('rack-view').innerHTML = '';
   const host = $('rack-grid'); host.innerHTML = '';
-  const pending = (candidates || []).filter(c => c.recipe.status === 'pending');
-  if (!pending.length) {
+  if (!rackPending.length) {
+    rackSpotId = null;
     host.innerHTML = '<p class="empty">Nothing curing right now — fire a prop or brief the Night Shift.</p>';
     return;
   }
-  pending.forEach(entry => {
-    const r = entry.recipe;
-    const card = document.createElement('article');
-    card.className = 'canister candidate';
-    card.dataset.id = entry.id;
-    // the Mend: a refired candidate's scar flares once, the first time it deals in
-    if (r.refire_count > 0 && !seenScars.has(entry.id)) {
-      card.classList.add('mended'); seenScars.add(entry.id);
-    }
-    const well = document.createElement('div'); well.className = 'well';
-    if (entry.frames?.length) {
-      const img = document.createElement('img'); img.className = 'spin';
-      img.dataset.frames = JSON.stringify(entry.frames);
-      img.src = '/kiln-output/' + entry.frames[0];
-      img.alt = r.canister_label || r.subject;
-      well.appendChild(img);
-      // grab it off the strip: first touch hands the piece to the Potter's Wheel
-      well.classList.add('wheel');
-      well.title = 'Drag to turn the piece — every angle, not just the eight';
-      well.addEventListener('pointerdown', () => {
-        const yaw = 2 * Math.PI * (rackSpinFrame % 8) / 8;
-        spinUp(well, entry.id, yaw, rackWheels)
-          .then(() => img.remove())
-          .catch(() => {});  // strip keeps spinning if the wheel jams
-      }, { once: true });
-    } else {
-      const ph = document.createElement('span'); ph.className = 'no-spin'; ph.textContent = '◌';
-      well.appendChild(ph);
-    }
-    const verdict = qaVerdict(entry);
-    const badge = document.createElement('span'); badge.className = 'qa-badge ' + verdict.cls;
-    badge.textContent = verdict.word;
-    well.appendChild(badge);
-    const body = document.createElement('div'); body.className = 'body';
-    const title = document.createElement('p'); title.className = 'title';
-    title.textContent = r.canister_label || r.subject;
-    const chips = document.createElement('div'); chips.className = 'chips';
-    const chip = (text, cls = 'chip') => {
-      const s = document.createElement('span'); s.className = cls; s.textContent = text;
-      chips.appendChild(s);
-    };
-    chip(r.orient_hint);
-    if (r.refire_count > 0) chip(`refired · ${r.octree}`, 'chip scar');
-    else chip(`octree ${r.octree}`);
-    chip(`seed ${r.seed}`);
-    if (r.two_sided) chip('two-sided');
-    body.append(title, chips);
-    const line = qaLine(entry);
-    if (line) {
-      const q = document.createElement('p'); q.className = 'qa-line'; q.textContent = line;
-      body.appendChild(q);
-    }
-    const acts = document.createElement('div'); acts.className = 'acts';
-    const approve = document.createElement('button'); approve.className = 'fire';
-    approve.textContent = 'Approve';
-    const refire = document.createElement('button'); refire.className = 'act';
-    refire.textContent = 'Refire';
-    approve.addEventListener('click', () => showApproveRow(card, entry));
-    refire.addEventListener('click', () => showRefireRow(card, entry));
-    acts.append(approve, refire);
-    body.appendChild(acts);
-    card.append(well, body);
-    host.appendChild(card);
-  });
+  rackPending.forEach(entry => host.appendChild(buildRackCard(entry, false)));
+  if (rackSpotId && !rackPending.some(e => e.id === rackSpotId)) rackSpotId = null;
+  if (rackSpotId) spotlightRack(rackSpotId);  // the wheel survives a re-deal
   startRackSpin();
 }
 function startRackSpin() {
@@ -1496,7 +1556,7 @@ function startRackSpin() {
   rackSpinTimer = setInterval(() => {
     rackSpinFrame = (rackSpinFrame + 1) % 8;
     setFrame(rackSpinFrame);
-  }, 125);  // ~8 fps — the QA render IS the preview, one pass, two consumers
+  }, 500);  // a slow shelf turn — 4 s the way round; the Wheel is where you go fast
 }
 REDUCED_MOTION.addEventListener('change', startRackSpin);
 const slugify = text => (text || '').toLowerCase()
