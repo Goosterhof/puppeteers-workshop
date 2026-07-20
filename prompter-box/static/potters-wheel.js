@@ -18,10 +18,12 @@ export function mountWheel(container, glbUrl, { initialYaw = 0, reducedMotion = 
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  // headlamp rig: the key light rides the camera, so no angle is ever unlit
-  scene.add(new THREE.AmbientLight(0xffffff, 1.4));
-  const key = new THREE.DirectionalLight(0xffffff, 2.2);
+  // over-the-shoulder rig: the key rides the camera (no angle unlit) but sits
+  // off-axis, so the form still models — a dead-on headlamp flattens everything
+  scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+  const key = new THREE.DirectionalLight(0xffffff, 2.6);
   scene.add(key, key.target);
+  const camRight = new THREE.Vector3(), camUp = new THREE.Vector3();
 
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100);
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -33,7 +35,12 @@ export function mountWheel(container, glbUrl, { initialYaw = 0, reducedMotion = 
 
   let mag = 1, raf = null, lastActive = 0, dragging = false, disposed = false;
   const render = () => {
-    key.position.copy(camera.position);
+    const reach = camera.position.distanceTo(controls.target) || 1;
+    camRight.setFromMatrixColumn(camera.matrixWorld, 0);
+    camUp.setFromMatrixColumn(camera.matrixWorld, 1);
+    key.position.copy(camera.position)
+      .addScaledVector(camRight, reach * 0.6)
+      .addScaledVector(camUp, reach * 0.5);
     key.target.position.copy(controls.target);
     renderer.render(scene, camera);
   };
@@ -62,6 +69,18 @@ export function mountWheel(container, glbUrl, { initialYaw = 0, reducedMotion = 
   const ready = new Promise((resolve, reject) => {
     loader.load(glbUrl, (gltf) => {
       if (disposed) return resolve();  // the card re-dealt while the piece was loading
+      // the kiln's GLBs carry POSITION only — no normals, no materials. Without
+      // this pass three lights nothing (zero normals) and glTF's default
+      // material is full-metal white: the piece renders as a flat gray ghost.
+      gltf.scene.traverse((o) => {
+        if (!o.isMesh) return;
+        if (!o.geometry.getAttribute('normal')) o.geometry.computeVertexNormals();
+        const m = o.material;
+        if (m?.isMeshStandardMaterial) {
+          m.metalness = 0; m.roughness = 0.88;
+          if (!m.map && m.color.getHex() === 0xffffff) m.color.setHex(0xb9b4ac);  // bisque, like the strip
+        }
+      });
       scene.add(gltf.scene);
       const box = new THREE.Box3().setFromObject(gltf.scene);
       const center = box.getCenter(new THREE.Vector3());
