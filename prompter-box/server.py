@@ -555,6 +555,10 @@ class BoothWindow(BaseHTTPRequestHandler):
             return self.send_file(MM_OUT, path[len("/foley-output/"):])
         if path.startswith("/kiln-output/"):
             return self.send_file(kiln.KILN_OUT, path[len("/kiln-output/"):])
+        if path.startswith("/pack-queue/"):
+            return self.send_file(kiln.PACK_QUEUE, path[len("/pack-queue/"):])
+        if path == "/api/shelf/list":
+            return self.api_shelf_list()
         if path == "/api/status":
             return self.api_status()
         if path == "/api/kiln/job":
@@ -598,6 +602,7 @@ class BoothWindow(BaseHTTPRequestHandler):
             "/api/kiln/generate": self.api_kiln_generate,
             "/api/rack/approve": self.api_rack_approve,
             "/api/rack/refire": self.api_rack_refire,
+            "/api/rack/discard": self.api_rack_discard,
             "/api/turntable/run": self.api_turntable_run,
             "/api/queue/add": self.api_queue_add,
             "/api/queue/remove": self.api_queue_remove,
@@ -1088,6 +1093,16 @@ class BoothWindow(BaseHTTPRequestHandler):
                                          p.get("pack_name")))
         except kiln.RackRefusal as e:
             self.fail(str(e), 409)
+
+    def api_rack_discard(self, p):
+        try:
+            self.reply(kiln.rack_discard((p.get("candidate_id") or "").strip()))
+        except kiln.RackRefusal as e:
+            self.fail(str(e), 409)
+
+    # -- the prop shelf (the Workshop's own prop library) ----------------
+    def api_shelf_list(self):
+        self.reply({"props": kiln.shelf_list()})
 
     def api_rack_refire(self, p):
         global kiln_job

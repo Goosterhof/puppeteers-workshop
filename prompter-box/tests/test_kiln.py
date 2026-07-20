@@ -353,3 +353,39 @@ class TestMeshGraph:
         assert kiln.pick_key_colour("terracotta geraniums") == ("chroma magenta", "#FF00FF")
         assert kiln.pick_key_colour("a pink parasol") == ("chroma green", "#00FF00")
         assert kiln.pick_key_colour("purple geranium basket") == ("chroma blue", "#0000FF")
+
+
+class TestRackDiscard:
+    def test_should_break_a_pending_candidate_and_remove_every_artifact(self, fired_solid):
+        cid = fired_solid["result"].id
+        out = kiln.rack_discard(cid)
+        assert out["discarded"] == cid
+        assert not kiln.candidate_dir(cid).exists()
+        assert cid not in {e["id"] for e in kiln.rack_list()}
+
+    def test_should_refuse_to_break_an_approved_candidate(self, fired_solid):
+        cid = fired_solid["result"].id
+        kiln.rack_approve(cid, "gnome-red-hat")
+        with pytest.raises(kiln.RackRefusal, match="audit trail"):
+            kiln.rack_discard(cid)
+        assert kiln.candidate_dir(cid).exists()
+
+    def test_should_refuse_a_candidate_that_never_fired(self, kiln_sandbox):
+        with pytest.raises(kiln.RackRefusal, match="No candidate"):
+            kiln.rack_discard("kiln-00000000-000000-ffffff")
+
+
+class TestPropShelf:
+    def test_should_list_an_approved_pair_married_to_its_firing_record(self, fired_solid):
+        cid = fired_solid["result"].id
+        kiln.rack_approve(cid, "gnome-red-hat")
+        [prop] = kiln.shelf_list()
+        assert prop["name"] == "gnome-red-hat"
+        assert prop["glb"] == "gnome-red-hat.glb"
+        assert prop["hide"] == "gnome-red-hat-hide.png"
+        assert prop["subject"] == "a garden gnome with a red hat"
+        assert prop["seed"] == 7
+        assert prop["two_sided"] is False
+
+    def test_should_read_an_empty_shelf_without_a_queue_dir(self, kiln_sandbox):
+        assert kiln.shelf_list() == []

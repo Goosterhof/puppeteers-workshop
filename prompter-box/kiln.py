@@ -606,6 +606,64 @@ def rack_approve(candidate_id, pack_name):
     }
 
 
+def rack_discard(candidate_id):
+    """The Scientist's other thumb — breaks a curing candidate for good.
+    Deletes the whole firing from kiln-output/: painting, mesh, QA report,
+    turntable frames. Pending only — approved and superseded candidates are
+    the Rack's audit trail and stay. The confirm dialog lives in the booth;
+    this function is the point of no return."""
+    recipe = read_recipe(candidate_id)
+    if recipe is None:
+        raise RackRefusal(f"No candidate '{candidate_id}' is curing on the rack.")
+    if recipe.get("status") != "pending":
+        raise RackRefusal(
+            f"'{candidate_id}' is not pending — it is {recipe.get('status')}. "
+            "Only a curing candidate can be broken; the rest are the audit trail."
+        )
+    cdir = candidate_dir(candidate_id).resolve()
+    if not cdir.is_relative_to(KILN_OUT.resolve()):
+        raise RackRefusal("That candidate is not on this rack.")
+    shutil.rmtree(cdir)
+    return {"discarded": candidate_id, "subject": recipe.get("subject")}
+
+
+def shelf_list():
+    """The Prop Shelf — every approved pair in pack-queue/, read back as the
+    Workshop's own prop library. The shelf is the product; consumers (the
+    town sketches' pack-props.mjs among them) come to IT, not the reverse.
+    Each entry is married back to its firing record when one survives."""
+    if not PACK_QUEUE.exists():
+        return []
+    firings = {}
+    if KILN_OUT.exists():
+        for d in KILN_OUT.iterdir():
+            try:
+                r = json.loads((d / "recipe.json").read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+            if r.get("pack_name"):
+                firings[r["pack_name"]] = r
+    items = []
+    for glb in PACK_QUEUE.glob("*.glb"):
+        name = glb.stem
+        hide = PACK_QUEUE / f"{name}-hide.png"
+        fired = firings.get(name, {})
+        items.append({
+            "name": name,
+            "glb": glb.name,
+            "glb_mb": round(glb.stat().st_size / 1e6, 2),
+            "hide": hide.name if hide.exists() else None,
+            "two_sided": (PACK_QUEUE / f"{name}-back.png").exists(),
+            "shelved_at": datetime.fromtimestamp(glb.stat().st_mtime)
+                          .isoformat(timespec="seconds"),
+            "subject": fired.get("subject"),
+            "seed": fired.get("seed"),
+            "octree": fired.get("octree"),
+        })
+    items.sort(key=lambda it: it["shelved_at"], reverse=True)
+    return items
+
+
 def rack_refire(candidate_id, octree, threshold, clear_set=None, log=None):
     """Re-fire ONLY the mesh stage on the candidate's stored hide — the
     painting the Scientist judged is the painting that gets re-meshed
