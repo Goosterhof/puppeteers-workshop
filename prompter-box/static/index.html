@@ -47,7 +47,7 @@
     line-height: 1.5;
     min-height: 100vh;
   }
-  main { max-width: 1060px; margin: 0 auto; padding: 0 20px 80px; }
+  main { max-width: 1680px; margin: 0 auto; padding: 0 20px 80px; }
 
   /* ---- header ---- */
   header {
@@ -316,11 +316,6 @@
     font-size: 10.5px; font-style: italic; color: var(--dim); opacity: .85;
   }
   .wheel.spun .wheel-hint { opacity: 0; transition: opacity .6s ease; }
-  /* the rack breaks out of the column — a full shelf earns the whole wall */
-  #tab-rack {
-    --rackw: min(100vw - 64px, 1680px);
-    width: var(--rackw); margin-left: calc((100% - var(--rackw)) / 2);
-  }
   .candidate .well.shelf { cursor: pointer; }
   .candidate .well.shelf:hover { box-shadow: inset 0 0 0 1px var(--lamp-dim); }
   .candidate.spotlit { border-color: var(--lamp); }
