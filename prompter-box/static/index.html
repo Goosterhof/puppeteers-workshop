@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Prompter's Box</title>
+<script type="importmap">
+  {"imports": {"three": "/static/vendor/three.module.min.js",
+               "three/addons/": "/static/vendor/jsm/"}}
+</script>
 <style>
   :root {
     --booth: #17130f;
@@ -295,8 +299,21 @@
   }
   .candidate .well img.spin { width: 100%; height: 148px; object-fit: contain; display: block; }
   .candidate .well .no-spin { color: var(--curing); font-size: 26px; }
+  /* the Potter's Wheel — grab the piece and turn it */
+  .wheel { position: relative; cursor: grab; touch-action: none; }
+  .wheel:active { cursor: grabbing; }
+  .wheel canvas.wheel-canvas {
+    position: absolute; inset: 0; display: block;
+    width: 100% !important; height: 100% !important;
+  }
+  .mount-frame .wheel { width: min(100%, 420px); height: 320px; }
+  .wheel-hint {
+    position: absolute; left: 8px; bottom: 6px; margin: 0; pointer-events: none; z-index: 2;
+    font-size: 10.5px; font-style: italic; color: var(--dim); opacity: .85;
+  }
+  .wheel.spun .wheel-hint { opacity: 0; transition: opacity .6s ease; }
   .qa-badge {
-    position: absolute; top: 0; right: 0;
+    position: absolute; top: 0; right: 0; z-index: 2;
     font: 11px var(--display); letter-spacing: .2em; text-transform: uppercase; color: var(--ink);
     padding: 4px 12px 4px 10px;
     clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%);
@@ -1263,6 +1280,19 @@ $('arch-kinds').querySelectorAll('button').forEach(b => b.addEventListener('clic
 }));
 loadArchive();
 
+/* ---- the potter's wheel: drag the fired piece, see every angle ---- */
+let wheelLib = null, kilnWheel = null;
+const rackWheels = new Set();
+async function spinUp(container, candidateId, initialYaw, registry) {
+  wheelLib ??= await import('/static/potters-wheel.js');
+  const handle = wheelLib.mountWheel(container,
+    `/kiln-output/${candidateId}/${candidateId}.glb`,
+    { initialYaw, reducedMotion: REDUCED_MOTION.matches });
+  registry?.add(handle);
+  await handle.ready;
+  return handle;
+}
+
 /* ---- the kiln room ---- */
 const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)');
 let kilnPoller = null;
@@ -1280,6 +1310,7 @@ $('kiln-go').addEventListener('click', async () => {
       two_sided: $('kiln-two-sided').checked,
       seed: $('kiln-seed').value === '' ? undefined : +$('kiln-seed').value,
     });
+    kilnWheel?.dispose(); kilnWheel = null;
     $('kiln-result').innerHTML = ''; $('kiln-log').hidden = false;
     watchKiln();
   } catch (e) { resetKilnGo(); showError('kiln-error', e); }
@@ -1306,14 +1337,25 @@ function watchKiln() {
 function mountFiring(c) {
   // the result card is the turntable well + ONE act — judgment happens on
   // the Rack, never at the firing bench
+  kilnWheel?.dispose(); kilnWheel = null;
   const host = $('kiln-result'); host.innerHTML = '';
   const fig = document.createElement('figure'); fig.className = 'mount';
   const frame = document.createElement('div'); frame.className = 'mount-frame';
+  const well = document.createElement('div'); well.className = 'wheel';
   const img = document.createElement('img');
   img.src = `/kiln-output/${c.id}/turn/000.png`; img.alt = c.subject;
+  well.appendChild(img);
+  // the poster holds the frame while the Wheel takes the piece off the kiln
+  spinUp(well, c.id, 0).then(h => {
+    kilnWheel = h; img.remove();
+    const hint = document.createElement('p'); hint.className = 'wheel-hint';
+    hint.textContent = 'take it by the rim — drag to see every side';
+    well.appendChild(hint);
+    well.addEventListener('pointerdown', () => well.classList.add('spun'), { once: true });
+  }).catch(() => {});  // no wheel? the still frame stands
   const stamp = document.createElement('span'); stamp.className = 'mount-stamp';
   stamp.textContent = c.refire_count ? 'Fired · mended' : 'Fired';
-  frame.append(img, stamp);
+  frame.append(well, stamp);
   const body = document.createElement('figcaption'); body.className = 'mount-body';
   const t = document.createElement('p'); t.className = 'mount-title'; t.textContent = c.subject;
   const chips = document.createElement('div'); chips.className = 'mount-chips';
@@ -1369,6 +1411,7 @@ function cardError(card, message) {
   el.textContent = message; el.hidden = false;
 }
 function renderRack(candidates) {
+  rackWheels.forEach(h => h.dispose()); rackWheels.clear();
   const host = $('rack-grid'); host.innerHTML = '';
   const pending = (candidates || []).filter(c => c.recipe.status === 'pending');
   if (!pending.length) {
@@ -1391,6 +1434,15 @@ function renderRack(candidates) {
       img.src = '/kiln-output/' + entry.frames[0];
       img.alt = r.canister_label || r.subject;
       well.appendChild(img);
+      // grab it off the strip: first touch hands the piece to the Potter's Wheel
+      well.classList.add('wheel');
+      well.title = 'Drag to turn the piece — every angle, not just the eight';
+      well.addEventListener('pointerdown', () => {
+        const yaw = 2 * Math.PI * (rackSpinFrame % 8) / 8;
+        spinUp(well, entry.id, yaw, rackWheels)
+          .then(() => img.remove())
+          .catch(() => {});  // strip keeps spinning if the wheel jams
+      }, { once: true });
     } else {
       const ph = document.createElement('span'); ph.className = 'no-spin'; ph.textContent = '◌';
       well.appendChild(ph);

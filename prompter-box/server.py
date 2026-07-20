@@ -542,6 +542,9 @@ class BoothWindow(BaseHTTPRequestHandler):
         path = urllib.parse.unquote(path)
         if path in ("/", "/index.html"):
             return self.send_file(STATIC, "index.html")
+        if path.startswith("/static/"):
+            # the Potter's Wheel and its vendored three.js live here
+            return self.send_file(STATIC, path[len("/static/"):])
         if path.startswith("/footage/"):
             return self.send_file(FOOTAGE, path[len("/footage/"):])
         if path.startswith("/face-output/"):
