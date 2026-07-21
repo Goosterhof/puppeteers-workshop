@@ -17,6 +17,11 @@ export const forgeLead = ref(null);
 export const pickedImage = ref(null);
 export const faceSitter = ref(null);
 
+// The cues in flight — "Cue the stage →" and "Cue the face shop →" write
+// into another room's prompt box, so the boxes live here.
+export const stagePrompt = ref('');
+export const facePrompt = ref('');
+
 // A cast lead's natural size, parked for the Stage's resolution matcher —
 // consumed when the Stage room rises in Phase 3.
 export const leadRes = ref(null);

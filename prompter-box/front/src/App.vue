@@ -11,7 +11,10 @@ import NightShiftRoom from './rooms/NightShiftRoom.vue';
 import RackRoom from './rooms/RackRoom.vue';
 import ShelfRoom from './rooms/ShelfRoom.vue';
 import StageRoom from './rooms/StageRoom.vue';
-import {activeTab as active} from './stores/booth.js';
+import {activeTab as active, loadFootage} from './stores/booth.js';
+
+// one footage fetch feeds the three thumb rows, like the old boot-time load
+loadFootage().catch(() => {});
 
 // The eleven rooms, in the old front's tab order. Plain reactive tab state —
 // no router; the booth never had deep links (#00063 §1A).
