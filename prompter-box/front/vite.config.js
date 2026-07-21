@@ -23,6 +23,9 @@ export default defineConfig({
     build: {
         outDir: '../static/booth',
         emptyOutDir: true,
+        // the lazy Potter's Wheel chunk carries three.js (~580 KB) — the same
+        // weight the vendored era accepted; anything heavier should be seen
+        chunkSizeWarningLimit: 700,
     },
     server: {
         port: 7902,
