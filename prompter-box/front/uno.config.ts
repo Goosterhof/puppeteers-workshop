@@ -122,6 +122,15 @@ export default defineConfig({
         .note a { color: var(--lamp); }
         .error { color: var(--cue-red); font-size: 13px; margin-top: 12px; white-space: pre-wrap; }
         .empty { font-size: 12px; font-style: italic; color: var(--dim); letter-spacing: .06em; }
+        .result { margin-top: 18px; display: grid; gap: 16px; justify-items: start; }
+        .result .cap { font-size: 12px; letter-spacing: .08em; }
+        .thumbrow { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+        .thumbrow img, .thumbrow video {
+          height: 86px; border: 2px solid transparent; border-radius: 2px; cursor: pointer;
+          opacity: .75;
+        }
+        .thumbrow img:hover, .thumbrow video:hover { opacity: 1; }
+        .thumbrow img.picked { border-color: var(--lamp); opacity: 1; }
 
         @media (prefers-reduced-motion: reduce) {
           *, *::before, *::after {

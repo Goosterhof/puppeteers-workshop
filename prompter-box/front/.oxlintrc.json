@@ -90,11 +90,12 @@
     "overrides": [
         {"files": ["*.vue"], "rules": {"no-undef": "off"}},
         {
-            // The callboard's state grammar is the single-file front's ratified
-            // mapping ported 1:1 (#00063 — behavior parity is the acceptance
-            // contract). The ternary chains ARE the contract; splitting them to
-            // duck a ceiling would change the thing the tests pin down.
-            "files": ["src/lib/stationState.js"],
+            // The callboard's state grammar and the canister chip recipe are
+            // the single-file front's ratified mappings ported 1:1 (#00063 —
+            // behavior parity is the acceptance contract). The ternary/if
+            // chains ARE the contract; splitting them to duck a ceiling would
+            // change the thing the tests pin down.
+            "files": ["src/lib/stationState.js", "src/lib/canisters.js"],
             "rules": {"complexity": "off"}
         },
         {

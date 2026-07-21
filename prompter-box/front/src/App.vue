@@ -1,5 +1,4 @@
 <script setup>
-import {ref} from 'vue';
 import Callboard from './components/Callboard.vue';
 import ArchiveRoom from './rooms/ArchiveRoom.vue';
 import FaceRoom from './rooms/FaceRoom.vue';
@@ -12,6 +11,7 @@ import NightShiftRoom from './rooms/NightShiftRoom.vue';
 import RackRoom from './rooms/RackRoom.vue';
 import ShelfRoom from './rooms/ShelfRoom.vue';
 import StageRoom from './rooms/StageRoom.vue';
+import {activeTab as active} from './stores/booth.js';
 
 // The eleven rooms, in the old front's tab order. Plain reactive tab state —
 // no router; the booth never had deep links (#00063 §1A).
@@ -28,7 +28,6 @@ const TABS = [
     {id: 'house-stage', label: 'Stage UI', room: HouseStageRoom},
     {id: 'house-face', label: 'Face Shop UI', room: HouseFaceRoom},
 ];
-const active = ref('forge');
 </script>
 
 <template>
