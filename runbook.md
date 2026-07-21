@@ -137,6 +137,21 @@ session, or point any OpenAI-compatible client at `localhost:11434/v1`.
 `./start-prompter.sh` → **http://localhost:7900** — one booth for the whole
 pipeline (stdlib Python, `prompter-box/`, no venv):
 
+**The Proscenium (2026-07-21, experiment log #00063):** the booth front is a
+Vue 3 + UnoCSS + Vite app in `prompter-box/front/`. `npm run build` (bench
+Node v24 — a development-time tool only) emits the bundle into
+`prompter-box/static/`, and the bundle is **committed**: the bench serves
+straight after `git pull` with zero build steps, and the stdlib-runtime rule
+stands — `server.py` never grew a dependency and keeps serving `static/` as
+plain files (`/` → `static/index.html`, assets under `/static/`).
+Front containment: `cd prompter-box/front && npm run lint && npx vitest run
+&& npm run check:dist` — the drift guard rebuilds and fails the moment the
+committed bundle is stale against the source. Never edit `static/` by hand;
+it is build output (`vite build` empties it). Verify UI changes on the
+:7901 sideport (`verify-sideport.py`), never the investor's :7900 booth.
+three.js rides as an npm dep (pinned 0.177, the old vendored version) in a
+lazy chunk; the Potter's Wheel module lives at `front/src/lib/potters-wheel.js`.
+
 - **Forge** — the Promptsmith in a panel: idea → cue cards, each with
   copy / "Cue the stage" / "Cue the face shop" buttons. A **voice dropdown**
   (2026-07-18) lists every model on the Ollama shelf; "the booth decides"

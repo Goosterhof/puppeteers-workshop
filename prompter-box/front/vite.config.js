@@ -3,13 +3,13 @@ import UnoCSS from 'unocss/vite';
 import {fileURLToPath, URL} from 'node:url';
 import {defineConfig} from 'vite';
 
-// The Proscenium (#00063) — build target during the graft era.
+// The Proscenium (#00063) — post-cutover build target.
 //
-// The stdlib Python server serves the whole static/ tree at /static/ with no
-// directory index, so the new front lives at /static/booth/index.html while
-// the single-file booth keeps /. `base` makes every emitted asset URL resolve
-// under that prefix. At cutover (Phase 5) base becomes '/' and outDir becomes
-// '../static'.
+// The stdlib Python server serves static/index.html at / and the whole
+// static/ tree at /static/, so the built index.html lands at static/ root
+// and every asset URL resolves under /static/ (`base`). `emptyOutDir` IS
+// the strike: each build clears static/ so nothing but the built front
+// (and its committed bundle) lives there.
 //
 // The dev server proxies API and file-shelf routes to the :7901 sideport —
 // never the investor's :7900 booth (runbook §The Stagehands' Guard applies to
@@ -18,10 +18,10 @@ const SIDEPORT = 'http://127.0.0.1:7901';
 
 export default defineConfig({
     plugins: [vue(), UnoCSS()],
-    base: '/static/booth/',
+    base: '/static/',
     resolve: {alias: {'@': fileURLToPath(new URL('./src', import.meta.url))}},
     build: {
-        outDir: '../static/booth',
+        outDir: '../static',
         emptyOutDir: true,
         // the lazy Potter's Wheel chunk carries three.js (~580 KB) — the same
         // weight the vendored era accepted; anything heavier should be seen
