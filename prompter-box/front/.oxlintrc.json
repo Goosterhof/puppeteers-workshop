@@ -1,0 +1,120 @@
+{
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
+    "plugins": ["import", "unicorn", "promise", "vue", "vitest"],
+    "categories": {"correctness": "error"},
+    "env": {"builtin": true, "browser": true, "es2024": true},
+    "ignorePatterns": [
+        "coverage/**",
+        "node_modules/**",
+        "scripts/**",
+        "vite.config.js",
+        "vitest.config.js",
+        "uno.config.ts"
+    ],
+    "rules": {
+        // Core rules — the war-room defaults, minus the TypeScript layer
+        // (the Proscenium is plain JS by design, #00063 §1A)
+        "no-console": "warn",
+        "prefer-const": "error",
+        "eqeqeq": "error",
+        "no-var": "error",
+        "no-unused-vars": ["error", {"argsIgnorePattern": "^_"}],
+        "no-debugger": "error",
+        "no-empty": "error",
+        "no-self-compare": "error",
+        "no-template-curly-in-string": "error",
+        "no-unreachable": "error",
+        "no-throw-literal": "error",
+        "no-unneeded-ternary": "warn",
+        "prefer-template": "warn",
+        "radix": "error",
+
+        // Complexity limits — canonical war-room defaults
+        "complexity": ["error", 10],
+        "max-params": ["error", 4],
+        "max-depth": ["warn", 4],
+        "max-nested-callbacks": ["warn", 3],
+        "max-lines-per-function": ["warn", {"max": 80, "skipBlankLines": true, "skipComments": true}],
+
+        // Import rules
+        "import/no-duplicates": "error",
+        "import/first": "error",
+        "import/no-self-import": "error",
+        "import/no-cycle": "error",
+        "import/no-mutable-exports": "error",
+        "import/no-named-default": "error",
+        "import/no-empty-named-blocks": "error",
+
+        // Unicorn — modern JS best practices
+        "unicorn/no-array-for-each": "error",
+        "unicorn/prefer-array-some": "warn",
+        "unicorn/prefer-includes": "warn",
+        "unicorn/prefer-string-starts-ends-with": "warn",
+        "unicorn/no-null": "off",
+        "unicorn/prefer-array-flat": "warn",
+        "unicorn/prefer-array-flat-map": "warn",
+        "unicorn/prefer-number-properties": "warn",
+        "unicorn/prefer-optional-catch-binding": "warn",
+        "unicorn/throw-new-error": "error",
+        "unicorn/no-useless-spread": "error",
+        "unicorn/no-nested-ternary": "off",
+        "unicorn/prefer-node-protocol": "warn",
+        "unicorn/no-lonely-if": "warn",
+        "unicorn/no-abusive-eslint-disable": "error",
+        "unicorn/error-message": "error",
+        "unicorn/no-negation-in-equality-check": "error",
+        "unicorn/no-useless-promise-resolve-reject": "warn",
+        "unicorn/consistent-function-scoping": "warn",
+        "unicorn/prefer-at": "error",
+
+        // Promise rules
+        "promise/no-return-wrap": "error",
+        "promise/catch-or-return": "off",
+        "promise/no-nesting": "error",
+        "promise/param-names": "error",
+        "promise/no-multiple-resolved": "error",
+
+        // Vue rules
+        "vue/no-arrow-functions-in-watch": "error",
+        "vue/no-deprecated-destroyed-lifecycle": "error",
+        "vue/no-export-in-script-setup": "error",
+        "vue/no-lifecycle-after-await": "error",
+        "vue/prefer-import-from-vue": "error",
+        "vue/no-required-prop-with-default": "error",
+
+        // Vitest
+        "vitest/no-conditional-tests": "error",
+        "vitest/no-import-node-test": "error",
+        "vitest/consistent-test-filename": ["warn", {"pattern": ".*\\.spec\\.js$"}]
+    },
+    "overrides": [
+        {"files": ["*.vue"], "rules": {"no-undef": "off"}},
+        {
+            // The callboard's state grammar is the single-file front's ratified
+            // mapping ported 1:1 (#00063 — behavior parity is the acceptance
+            // contract). The ternary chains ARE the contract; splitting them to
+            // duck a ceiling would change the thing the tests pin down.
+            "files": ["src/lib/stationState.js"],
+            "rules": {"complexity": "off"}
+        },
+        {
+            "files": ["tests/**", "**/*.spec.js"],
+            "rules": {
+                "max-lines-per-function": "off",
+                "max-nested-callbacks": "off",
+                "complexity": "off",
+                "vitest/no-disabled-tests": "error",
+                "vitest/no-focused-tests": "error",
+                "vitest/no-identical-title": "error",
+                "vitest/prefer-strict-equal": "error",
+                "vitest/prefer-to-be": "error",
+                "vitest/prefer-to-contain": "error",
+                "vitest/valid-expect": "error",
+                "vitest/expect-expect": "error",
+                "vitest/no-conditional-expect": "error",
+                "vitest/valid-describe-callback": "error",
+                "vitest/no-commented-out-tests": "error"
+            }
+        }
+    ]
+}
