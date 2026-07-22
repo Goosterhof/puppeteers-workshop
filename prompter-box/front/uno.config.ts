@@ -78,6 +78,7 @@ export default defineConfig({
           --curing:    #8a6a2e;   /* QA pending — alias of --lamp-dim */
         }
         * { box-sizing: border-box; margin: 0; }
+        html, body, #app { height: 100%; }
         body {
           background: var(--booth);
           background-image: radial-gradient(ellipse 900px 340px at 50% -80px, rgba(232,176,74,.14), transparent 70%);
@@ -85,9 +86,8 @@ export default defineConfig({
           font-family: var(--body);
           font-size: 15px;
           line-height: 1.5;
-          min-height: 100vh;
+          overflow: hidden; /* the page never scrolls — the folio does (#00064 Phase B) */
         }
-        main { max-width: 1680px; margin: 0 auto; padding: 0 20px 80px; }
         /* the amber wash while a take runs — the mutex felt page-wide */
         body.take-running { background-image: radial-gradient(ellipse 900px 340px at 50% -80px, rgba(232,176,74,.24), transparent 70%); }
 
