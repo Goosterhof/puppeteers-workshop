@@ -3,10 +3,12 @@ import {ref} from 'vue';
 import {useStatusHeartbeat} from '../composables/useStatusHeartbeat';
 import type {LampState, StationName} from '../lib/stationState';
 
-// The five station plates, in wiring order — the blackout cools them L→R.
+// The five stations, in wiring order — the ledger reads them L→R like a
+// margin note. Same identities the plates carried; the Prompt Book (#00064)
+// just types them along the stage lip instead of framing them.
 const PLATES: {id: StationName; pos: string; cue: string}[] = [
     {id: 'forge', pos: 'Forge', cue: 'Promptsmith · Ollama'},
-    {id: 'face', pos: 'Face Shop', cue: 'ComfyUI'},
+    {id: 'face', pos: 'Face', cue: 'ComfyUI'},
     {id: 'stage', pos: 'Stage', cue: 'Wan2GP'},
     {id: 'foley', pos: 'Foley', cue: 'MMAudio'},
     {id: 'kiln', pos: 'Kiln', cue: 'Hunyuan3D · Klein'},
@@ -14,25 +16,37 @@ const PLATES: {id: StationName; pos: string; cue: string}[] = [
 
 const {board, poll, evict} = useStatusHeartbeat();
 const blackout = ref(false);
-const evictLabel = ref('Clear the boards');
+const evictLabel = ref('clear the boards');
 
 // The Face Shop reads "warm" on standby (the model is resident, not idle-cold)
-// and a live lamp shouts — same word choices as the single-file front.
+// and a live lamp shouts — same word choices as the plates always made.
 const stateWord = (id: StationName, state: LampState) =>
     state === 'standby' && id === 'face' ? 'warm' : state === 'live' ? 'LIVE' : state;
 
+// The blackout forces every lamp's SHOWN state dark; the heartbeat's truth
+// returns with the relight poll. V3 is the quietest variant: a value swap,
+// no cascade, no pulse — the word LIVE losing its filament IS the event.
+const shown = (id: StationName): LampState => (blackout.value ? 'dark' : board.stations[id].state);
+
+// Only the stations that hold something get a margin note — live (what is
+// rendering) and held (who refuses cues). ready/warm speak for themselves.
+const readFor = (id: StationName): string => {
+    const st = shown(id);
+    return (st === 'live' || st === 'held') ? board.stations[id].read : '';
+};
+
 async function clearTheBoards() {
-    blackout.value = true; // lamps cool to dark L→R — the master switch thrown
+    blackout.value = true; // every lamp cools by value — the master switch thrown
     try {
         const evicted = await evict();
         evictLabel.value = evicted.length
             ? `${evicted.length} voice${evicted.length === 1 ? '' : 's'} left the boards`
-            : 'The boards were already clear';
+            : 'the boards were already clear';
     } catch {
-        evictLabel.value = 'The booth is not answering';
+        evictLabel.value = 'the booth is not answering';
     }
     setTimeout(() => {
-        evictLabel.value = 'Clear the boards';
+        evictLabel.value = 'clear the boards';
     }, 2600);
     setTimeout(() => {
         blackout.value = false;
@@ -43,84 +57,60 @@ async function clearTheBoards() {
 
 <template>
   <div
-    id="callboard" class="callboard" :class="{cold: board.cold, blackout}"
-    role="status" aria-label="The call board — who holds the stage"
+    id="callboard" class="pit" :class="{cold: board.cold, blackout}"
+    role="status" aria-label="The footlight ledger — who holds the boards"
   >
-    <div
+    <span
       v-for="p in PLATES" :key="p.id"
-      class="station" :class="board.stations[p.id].state" :data-station="p.id"
+      class="ledger-item" :class="`is-${shown(p.id)}`" :data-station="p.id" :title="p.cue"
     >
-      <i class="eye"></i><b class="pos">{{ p.pos }}</b>
-      <span class="cue">{{ p.cue }}</span>
-      <span class="state">{{ stateWord(p.id, board.stations[p.id].state) }}</span>
-      <span class="read">{{ board.stations[p.id].read }}</span>
-    </div>
-    <div class="dimmer">
-      <span class="occ-label">Stage load</span>
-      <div class="track"><i id="occ-fill" :style="{width: `${board.occ.pct}%`}"></i></div>
-      <span id="occ-read" class="occ-read">{{ board.occ.read }}</span>
-    </div>
-    <button id="evict" title="Unload every LLM from the GPU" @click="clearTheBoards">{{ evictLabel }}</button>
+      <i class="cue-lamp" :class="shown(p.id)"></i>{{ p.pos }}&nbsp;<span class="st">{{ stateWord(p.id, shown(p.id)) }}</span>
+      <span v-if="readFor(p.id)" class="rd">· {{ readFor(p.id) }}</span>
+    </span>
+    <span class="ledger-sep">·</span>
+    <span id="occ-read" class="ledger-read">Stage load {{ Math.round(board.occ.pct) }}% · <b>{{ board.occ.read }}</b></span>
+    <button id="evict" class="evict-typed" title="Unload every LLM from the GPU" @click="clearTheBoards">{{ evictLabel }}</button>
   </div>
 </template>
 
 <style>
-.callboard {
-  display: flex; flex-wrap: wrap; align-items: stretch; gap: 12px;
-  padding: 16px 20px; margin: 0 -20px 6px;
-  background: var(--drape); border-bottom: 1px solid var(--drape-edge);
+/* ===== The Pit: the typed footlight ledger (#00064 Phase C).
+   No pulse — LIVE signals by value in --filament, the quietest organ the
+   booth has ever had. The prompter writes the board state in the margin. ===== */
+.pit {
+  grid-area: pit; background: var(--booth); border-top: 1px solid var(--drape-edge);
+  display: flex; align-items: center; flex-wrap: wrap; gap: 2px 4px;
+  padding: 14px 20px; font: 13px var(--typed); color: var(--dim);
 }
-.station {
-  flex: 1 1 150px; min-width: 140px; display: grid;
-  grid-template-columns: auto 1fr; gap: 2px 10px; align-items: center;
-  background: var(--plate-face); border: 1px solid var(--plate-edge); border-radius: 3px;
-  padding: 12px 14px;
+.ledger-item { display: inline-flex; align-items: center; white-space: nowrap; }
+.cue-lamp {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  border: 1px solid var(--lamp-dim); background: var(--stage-off); margin: 0 6px 0 14px;
 }
-.station .eye {
-  grid-row: 1 / 5; width: 26px; height: 26px; border-radius: 50%;
-  background: var(--stage-off); box-shadow: inset 0 1px 3px rgba(0,0,0,.7);
-  transition: background .42s ease, box-shadow .42s ease;
+.cue-lamp.ready   { background: var(--go-green); border-color: var(--go-green); }
+.cue-lamp.standby { background: var(--lamp); border-color: var(--lamp); }
+.cue-lamp.held    { background: var(--cue-red); border-color: var(--cue-red); }
+.cue-lamp.live    { background: var(--filament); border-color: var(--lamp); box-shadow: 0 0 5px rgba(255,210,122,.7); } /* value, never motion */
+.cue-lamp.dark    { background: var(--stage-dead); border-color: var(--plate-edge); }
+.ledger-item .st { color: var(--dim); }
+.ledger-item.is-ready .st   { color: var(--go-green); }
+.ledger-item.is-standby .st { color: var(--lamp); }
+.ledger-item.is-held .st    { color: var(--cue-red); }
+.ledger-item.is-live .st    { color: var(--filament); font-weight: 700; letter-spacing: .06em; }
+.ledger-item .rd { color: var(--dim); margin-left: 6px; font-style: italic; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.ledger-sep { color: var(--drape-edge); margin: 0 2px 0 14px; }
+.ledger-read { margin-left: 20px; color: var(--dim); }
+.ledger-read b { color: var(--paper); font-weight: 400; }
+.evict-typed {
+  margin-left: auto; background: none; border: 1px solid var(--drape-edge); color: var(--dim);
+  font: 11px var(--typed); letter-spacing: .04em; padding: 7px 13px; cursor: pointer; border-radius: 2px;
 }
-.station .pos { font: 500 13px var(--display); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); grid-column: 2; }
-.station .cue { font-size: 10px; letter-spacing: .1em; color: var(--dim); grid-column: 2; }
-.station .state { font: 11px var(--display); letter-spacing: .18em; text-transform: uppercase; grid-column: 2; color: var(--dim); }
-.station .read { font: 10px var(--typed); color: var(--dim); grid-column: 2; opacity: .8; min-height: 1em; }
-.station.ready   .eye { background: var(--go-green); box-shadow: 0 0 8px rgba(125,161,107,.6); }
-.station.ready   .state { color: var(--go-green); }
-.station.standby .eye { background: var(--lamp-dim); box-shadow: 0 0 6px rgba(138,106,46,.5); }
-.station.standby .state { color: var(--lamp); }
-.station.held    .eye { background: var(--cue-red); box-shadow: 0 0 8px rgba(194,84,58,.6); }
-.station.held    .state { color: var(--cue-red); }
-.station.live { background: #241a10; border-color: var(--lamp-dim); box-shadow: 0 0 22px rgba(232,176,74,.22); }
-.station.live .eye {
-  background: radial-gradient(circle at 40% 35%, var(--filament), var(--lamp) 70%);
-  box-shadow: 0 0 14px rgba(232,176,74,.9); animation: eye-pulse 1.4s ease-in-out infinite;
-}
-.station.live .state { color: var(--filament); font-weight: 600; }
-@keyframes eye-pulse { 50% { opacity: .5; } }
-.callboard.cold .station .eye { background: var(--stage-dead); box-shadow: inset 0 1px 3px rgba(0,0,0,.7); animation: none; }
-/* the blackout — lamps cool L→R like killing the work lights */
-.callboard.blackout .station .eye {
-  background: var(--stage-off) !important;
-  box-shadow: inset 0 1px 3px rgba(0,0,0,.7) !important; animation: none !important;
-}
-.callboard.blackout .station:nth-child(2) .eye { transition-delay: .08s; }
-.callboard.blackout .station:nth-child(3) .eye { transition-delay: .16s; }
-.callboard.blackout .station:nth-child(4) .eye { transition-delay: .24s; }
-.callboard.blackout .station:nth-child(5) .eye { transition-delay: .32s; }  /* the Kiln joins the L→R cool */
-.dimmer { flex: 1 1 180px; display: flex; flex-direction: column; justify-content: center; gap: 5px; }
-.dimmer .occ-label { font: 10px var(--display); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); }
-.dimmer .track { height: 8px; background: var(--meter-well); border-radius: 4px; overflow: hidden; }
-.dimmer .track i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--lamp-dim), var(--lamp)); transition: width .4s ease; }
-.dimmer .occ-read { font: 11px var(--typed); color: var(--dim); }
-#evict {
-  align-self: center; background: none; border: 1px solid var(--drape-edge); color: var(--dim);
-  font: 11px var(--display); letter-spacing: .18em; text-transform: uppercase;
-  padding: 8px 14px; cursor: pointer; border-radius: 2px;
-}
-#evict:hover { border-color: var(--lamp-dim); color: var(--lamp); }
+.evict-typed:hover { border-color: var(--cue-red); color: var(--cue-red); }
+.evict-typed:focus-visible { outline: 2px solid var(--lamp-dim); }
 
-@media (max-width: 640px) {
-  .station { min-width: 120px; }
+@media (max-width: 1000px) {
+  .pit { gap: 2px; padding: 12px 14px; }
+  .ledger-read { margin-left: 14px; }
+  .ledger-item .rd { display: none; } /* the margin notes yield first in a narrow booth */
 }
 </style>
