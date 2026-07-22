@@ -1,9 +1,10 @@
-<script setup>
+<script setup lang="ts">
 import {computed} from 'vue';
-import {canisterChips, ROOMS} from '../lib/canisters.js';
+import type {ShelfItem} from '../lib/canisters';
+import {canisterChips, ROOMS} from '../lib/canisters';
 
-const props = defineProps({item: {type: Object, required: true}});
-const emit = defineEmits(['mount']);
+const props = defineProps<{item: ShelfItem}>();
+const emit = defineEmits<{mount: [item: ShelfItem]}>();
 
 const src = computed(() => ROOMS[props.item.room].src + encodeURIComponent(props.item.name));
 const chips = computed(() => canisterChips(props.item));

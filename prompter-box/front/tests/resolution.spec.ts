@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {nearestResolution, RES_PRESETS} from '../src/lib/resolution.js';
+import {nearestResolution, RES_PRESETS} from '../src/lib/resolution';
 
 // The Stage's aspect matcher — a cast lead picks the preset whose aspect
 // ratio is nearest on the log scale (the old matchResolution).

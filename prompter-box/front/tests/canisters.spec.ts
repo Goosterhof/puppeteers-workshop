@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {age, canisterChips, filterArchive} from '../src/lib/canisters.js';
+import {age, canisterChips, filterArchive, type Archive, type ShelfItem} from '../src/lib/canisters';
 
 // The Canisters' pure grammar — chips, ages, and the shelf filter — pinned
 // to the single-file front's behavior (#00063 Phase 2).
@@ -28,7 +28,7 @@ describe('canisterChips', () => {
         mtime: NOW_S - 30,
         size: 2 * 1048576,
         meta: {model: 'wan22-i2v-14b', seed: 7, steps: 4, guidance: 1, resolution: '704x1280', frames: 41, loras: ['fastwan']},
-    };
+    } as ShelfItem;
 
     beforeEach(() => {
         vi.spyOn(Date, 'now').mockReturnValue(NOW_S * 1000);
@@ -58,14 +58,14 @@ describe('canisterChips', () => {
     });
 
     it('seed 0 and cfg 0 still earn their chips', () => {
-        const chips = canisterChips({room: 'face', mtime: NOW_S, meta: {seed: 0, guidance: 0}}, {fresh: true});
+        const chips = canisterChips({room: 'face', mtime: NOW_S, meta: {seed: 0, guidance: 0}} as ShelfItem, {fresh: true});
         expect(chips).toContainEqual(['seed 0', 'chip']);
         expect(chips).toContainEqual(['cfg 0', 'chip']);
     });
 });
 
 describe('filterArchive', () => {
-    const archive = {
+    const archive: Archive = {
         stage: [
             {name: 'crier-seed7.webm', kind: 'video', mtime: 300, meta: {prompt: 'the bell swings'}},
             {name: 'still.png', kind: 'image', mtime: 100, meta: {}},
@@ -94,6 +94,6 @@ describe('filterArchive', () => {
     });
 
     it('every item carries its room home', () => {
-        expect(filterArchive(archive, {kind: 'audio'})[0].room).toBe('foley');
+        expect(filterArchive(archive, {kind: 'audio'})[0]!.room).toBe('foley');
     });
 });

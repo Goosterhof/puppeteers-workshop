@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {createJobPoller} from '../src/composables/useJobPoller.js';
+import {createJobPoller} from '../src/composables/useJobPoller';
 
 // The 3-miss tolerance contract (#00063 §1A acceptance):
 //   miss < 3  → silent, the next tick retries
@@ -7,6 +7,10 @@ import {createJobPoller} from '../src/composables/useJobPoller.js';
 // plus: a successful fetch resets the count, and a settled job stops the beat.
 
 const INTERVAL = 3000;
+
+// The job shape the fake stage hands back — state plus the fields the last
+// spec asserts through onSettled.
+type Job = {state?: string; log_tail?: string[]; outputs?: string[]};
 
 describe('createJobPoller', () => {
     beforeEach(() => {
@@ -23,11 +27,11 @@ describe('createJobPoller', () => {
     };
 
     it('stays silent under the tolerance — two misses voice nothing and the beat goes on', async () => {
-        const fetchJob = vi.fn()
+        const fetchJob = vi.fn<() => Promise<Job>>()
             .mockRejectedValueOnce(new Error('gone'))
             .mockRejectedValueOnce(new Error('gone'))
             .mockResolvedValue({state: 'running'});
-        const onLost = vi.fn();
+        const onLost = vi.fn<(err: unknown) => void>();
         const poller = createJobPoller({fetchJob, intervalMs: INTERVAL, onLost});
         poller.start();
 
@@ -41,9 +45,9 @@ describe('createJobPoller', () => {
     });
 
     it('dies loudly on the third consecutive miss — onLost once, no further polling', async () => {
-        const fetchJob = vi.fn().mockRejectedValue(new Error('the server stopped answering'));
-        const onLost = vi.fn();
-        const onSettled = vi.fn();
+        const fetchJob = vi.fn<() => Promise<Job>>().mockRejectedValue(new Error('the server stopped answering'));
+        const onLost = vi.fn<(err: unknown) => void>();
+        const onSettled = vi.fn<(job: Job) => void>();
         const poller = createJobPoller({fetchJob, intervalMs: INTERVAL, onLost, onSettled});
         poller.start();
 
@@ -58,14 +62,14 @@ describe('createJobPoller', () => {
     });
 
     it('a successful fetch resets the miss count', async () => {
-        const fetchJob = vi.fn()
+        const fetchJob = vi.fn<() => Promise<Job>>()
             .mockRejectedValueOnce(new Error('gone'))
             .mockRejectedValueOnce(new Error('gone'))
             .mockResolvedValueOnce({state: 'running'})
             .mockRejectedValueOnce(new Error('gone'))
             .mockRejectedValueOnce(new Error('gone'))
             .mockResolvedValue({state: 'running'});
-        const onLost = vi.fn();
+        const onLost = vi.fn<(err: unknown) => void>();
         const poller = createJobPoller({fetchJob, intervalMs: INTERVAL, onLost});
         poller.start();
 
@@ -75,12 +79,12 @@ describe('createJobPoller', () => {
     });
 
     it('keeps ticking while the job runs, settles once it leaves the running state', async () => {
-        const fetchJob = vi.fn()
+        const fetchJob = vi.fn<() => Promise<Job>>()
             .mockResolvedValueOnce({state: 'running', log_tail: ['a']})
             .mockResolvedValueOnce({state: 'running', log_tail: ['a', 'b']})
             .mockResolvedValue({state: 'done', outputs: ['take.webm']});
-        const onTick = vi.fn();
-        const onSettled = vi.fn();
+        const onTick = vi.fn<(job: Job) => void>();
+        const onSettled = vi.fn<(job: Job) => void>();
         const poller = createJobPoller({fetchJob, intervalMs: INTERVAL, onTick, onSettled});
         poller.start();
 
@@ -98,7 +102,7 @@ describe('createJobPoller', () => {
     });
 
     it('start() twice never doubles the beat', async () => {
-        const fetchJob = vi.fn().mockResolvedValue({state: 'running'});
+        const fetchJob = vi.fn<() => Promise<Job>>().mockResolvedValue({state: 'running'});
         const poller = createJobPoller({fetchJob, intervalMs: INTERVAL});
         poller.start();
         poller.start();

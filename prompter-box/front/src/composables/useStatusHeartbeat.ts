@@ -1,11 +1,19 @@
 import {onMounted, onUnmounted, reactive} from 'vue';
-import {stageLoad, stationReads, stationState} from '../lib/stationState.js';
-import {api} from './useBoothApi.js';
+import type {LampState, StageLoad, StationName, StatusPayload} from '../lib/stationState';
+import {stageLoad, stationReads, stationState} from '../lib/stationState';
+import {api} from './useBoothApi';
 
-const STATIONS = ['forge', 'face', 'stage', 'foley', 'kiln'];
+const STATIONS: StationName[] = ['forge', 'face', 'stage', 'foley', 'kiln'];
 
-async function evict() {
-    const {evicted} = await api('/api/evict', {});
+export interface CallboardState {
+    cold: boolean;
+    takeRunning: boolean;
+    stations: Record<StationName, {state: LampState; read: string}>;
+    occ: StageLoad;
+}
+
+async function evict(): Promise<string[]> {
+    const {evicted} = await api<{evicted: string[]}>('/api/evict', {});
     return evicted;
 }
 
@@ -13,17 +21,19 @@ async function evict() {
 // the dimmer (#00063 §1B). A failed poll goes cold immediately: every lamp
 // dark, no invented numbers. The take-running amber wash is a body class so
 // the mutex is felt page-wide, same as the single-file front.
-export function useStatusHeartbeat({intervalMs = 5000} = {}) {
-    const board = reactive({
+export function useStatusHeartbeat({intervalMs = 5000}: {intervalMs?: number} = {}) {
+    const board = reactive<CallboardState>({
         cold: false,
         takeRunning: false,
-        stations: Object.fromEntries(STATIONS.map(n => [n, {state: 'dark', read: ''}])),
+        stations: Object.fromEntries(
+            STATIONS.map(n => [n, {state: 'dark', read: ''}]),
+        ) as CallboardState['stations'],
         occ: {pct: 0, read: '—'},
     });
 
     async function poll() {
         try {
-            const s = await api('/api/status');
+            const s = await api<StatusPayload>('/api/status');
             board.cold = false;
             const st = stationState(s);
             const reads = stationReads(s, st);
@@ -45,12 +55,14 @@ export function useStatusHeartbeat({intervalMs = 5000} = {}) {
         document.body.classList.toggle('take-running', board.takeRunning);
     }
 
-    let timer = null;
+    let timer: ReturnType<typeof setInterval> | null = null;
     onMounted(() => {
         poll();
         timer = setInterval(poll, intervalMs);
     });
-    onUnmounted(() => clearInterval(timer));
+    onUnmounted(() => {
+        if (timer !== null) clearInterval(timer);
+    });
 
     return {board, poll, evict};
 }

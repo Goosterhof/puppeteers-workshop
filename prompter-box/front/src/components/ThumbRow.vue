@@ -1,10 +1,10 @@
-<script setup>
-import {footage} from '../stores/booth.js';
+<script setup lang="ts">
+import {footage} from '../stores/booth';
 
 // One footage shelf, three rooms — the Forge's lead, the Stage's start
 // image, the Face Shop's sitter each pick from the same strip.
-defineProps({picked: {type: String, default: null}});
-const emit = defineEmits(['pick']);
+withDefaults(defineProps<{picked?: string | null}>(), {picked: null});
+const emit = defineEmits<{pick: [name: string]}>();
 </script>
 
 <template>

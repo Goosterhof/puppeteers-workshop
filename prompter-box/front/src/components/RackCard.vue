@@ -1,22 +1,58 @@
-<script setup>
+<script lang="ts">
+// One kiln firing on the Curing Rack — the record /api/rack/list deals out.
+// Exported so the Rack's siblings (RackRoom, BreakPit) speak the same shape.
+export interface FiringRecipe {
+    subject: string;
+    canister_label?: string | null;
+    status?: string;
+    refire_count: number;
+    octree: number;
+    threshold?: number;
+    seed: number;
+    orient_hint: string;
+    two_sided?: boolean;
+    shredding_detected?: boolean;
+}
+
+export interface FiringQa {
+    passed: boolean;
+    failure_reason?: string;
+}
+
+export interface Firing {
+    id: string;
+    recipe: FiringRecipe;
+    qa?: FiringQa | null;
+    frames?: string[];
+}
+</script>
+
+<script setup lang="ts">
 import {NumberInput, TextInput} from '@script-development/ui-inputs';
 import {computed, onUnmounted, ref} from 'vue';
 import PottersWheel from './PottersWheel.vue';
-import {api} from '../composables/useBoothApi.js';
-import {slugify} from '../lib/slugify.js';
+import {api} from '../composables/useBoothApi';
+import type {Chip} from '../lib/canisters';
+import {slugify} from '../lib/slugify';
 
 // One candidate on the Curing Rack — grid strip or spotlight. Judgment
 // happens here: Approve shelves, Refire re-meshes the SAME painting,
 // Discard hands the entry to the break-pit.
-const props = defineProps({
-    entry: {type: Object, required: true},
-    onWheel: {type: Boolean, default: false},
-    spinFrame: {type: Number, default: 0},
-    mended: {type: Boolean, default: false},
-    spotlit: {type: Boolean, default: false},
-    outerError: {type: String, default: ''},
+const props = withDefaults(defineProps<{
+    entry: Firing;
+    onWheel?: boolean;
+    spinFrame?: number;
+    mended?: boolean;
+    spotlit?: boolean;
+    outerError?: string;
+}>(), {
+    onWheel: false,
+    spinFrame: 0,
+    mended: false,
+    spotlit: false,
+    outerError: '',
 });
-const emit = defineEmits(['spotlight', 'reload', 'discard']);
+const emit = defineEmits<{spotlight: []; reload: []; discard: [entry: Firing]}>();
 
 const mode = ref('');
 const packName = ref(slugify(props.entry.recipe.canister_label || props.entry.recipe.subject));
@@ -25,8 +61,8 @@ const refThreshold = ref(0.4);
 const refiring = ref(false);
 const localError = ref('');
 const shownError = computed(() => localError.value || props.outerError);
-let refireTimer = null;
-onUnmounted(() => clearInterval(refireTimer));
+let refireTimer: ReturnType<typeof setInterval> | null = null;
+onUnmounted(() => clearInterval(refireTimer as number));
 
 const r = computed(() => props.entry.recipe);
 const frames = computed(() => props.entry.frames || []);
@@ -49,7 +85,7 @@ const qaLine = computed(() => {
     return '';
 });
 const chips = computed(() => {
-    const rows = [[r.value.orient_hint, 'chip']];
+    const rows: Chip[] = [[r.value.orient_hint, 'chip']];
     rows.push(r.value.refire_count > 0 ? [`refired · ${r.value.octree}`, 'chip scar'] : [`octree ${r.value.octree}`, 'chip']);
     rows.push([`seed ${r.value.seed}`, 'chip']);
     if (r.value.two_sided) rows.push(['two-sided', 'chip']);
@@ -67,7 +103,7 @@ async function shelve() {
         await api('/api/rack/approve', {candidate_id: props.entry.id, pack_name: name});
         emit('reload');
     } catch (e) {
-        localError.value = e.message;
+        localError.value = (e as Error).message;
     }
 }
 async function refire() {
@@ -76,16 +112,16 @@ async function refire() {
         refiring.value = true;
         refireTimer = setInterval(async () => {
             try {
-                const job = await api('/api/kiln/job');
+                const job = await api<{state?: string}>('/api/kiln/job');
                 if (job.state === 'running') return;
-                clearInterval(refireTimer);
+                clearInterval(refireTimer as number);
                 emit('reload'); // the mended candidate deals in with its ember scar
             } catch {
-                clearInterval(refireTimer);
+                clearInterval(refireTimer as number);
             }
         }, 3000);
     } catch (e) {
-        localError.value = e.message;
+        localError.value = (e as Error).message;
     }
 }
 </script>

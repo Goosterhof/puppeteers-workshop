@@ -1,21 +1,22 @@
-<script setup>
+<script setup lang="ts">
 import {ref} from 'vue';
+import type {Firing} from './RackCard.vue';
 
 // The breaking pit — the Rack's confirm before a firing becomes shards.
 // Three exits: Keep it curing, Esc (both keep the candidate), Break it.
-const emit = defineEmits(['break']);
-const dialog = ref(null);
+const emit = defineEmits<{break: [entry: Firing]}>();
+const dialog = ref<HTMLDialogElement | null>(null);
 const subject = ref('');
-let target = null;
+let target: Firing | null = null;
 
-function open(entry) {
+function open(entry: Firing) {
     target = entry;
     subject.value = `“${entry.recipe.canister_label || entry.recipe.subject}” — ${entry.id}`;
-    dialog.value.showModal();
+    dialog.value!.showModal();
 }
 function keep() {
     target = null;
-    dialog.value.close();
+    dialog.value!.close();
 }
 function onCancel() {
     target = null; // Esc keeps it curing
@@ -23,7 +24,7 @@ function onCancel() {
 function breakIt() {
     const entry = target;
     target = null;
-    dialog.value.close();
+    dialog.value!.close();
     if (entry) emit('break', entry);
 }
 defineExpose({open});

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import Callboard from './components/Callboard.vue';
 import ArchiveRoom from './rooms/ArchiveRoom.vue';
 import FaceRoom from './rooms/FaceRoom.vue';
@@ -11,7 +11,7 @@ import NightShiftRoom from './rooms/NightShiftRoom.vue';
 import RackRoom from './rooms/RackRoom.vue';
 import ShelfRoom from './rooms/ShelfRoom.vue';
 import StageRoom from './rooms/StageRoom.vue';
-import {activeTab as active, loadFootage} from './stores/booth.js';
+import {activeTab as active, loadFootage} from './stores/booth';
 
 // one footage fetch feeds the three thumb rows, like the old boot-time load
 loadFootage().catch(() => {});

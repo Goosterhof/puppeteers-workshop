@@ -1,30 +1,37 @@
-<script setup>
+<script setup lang="ts">
 import {onMounted, onUnmounted, ref} from 'vue';
+import type {WheelMount} from '../lib/potters-wheel';
 
 // The Potter's Wheel, wrapped — the module is fresh and tested-in-anger, so
 // the wrapper only owns the Vue lifecycle: mount on the well, hold the
 // poster until the piece is ready, dispose on unmount (#00063 §4A). If the
 // wheel jams, the poster stands.
-const props = defineProps({
-    glbUrl: {type: String, required: true},
-    initialYaw: {type: Number, default: 0},
-    posterSrc: {type: String, default: ''},
-    posterClass: {type: String, default: ''},
-    posterAlt: {type: String, default: ''},
-    hint: {type: String, default: 'take it by the rim — drag to see every side, scroll to lean in'},
+const props = withDefaults(defineProps<{
+    glbUrl: string;
+    initialYaw?: number;
+    posterSrc?: string;
+    posterClass?: string;
+    posterAlt?: string;
+    hint?: string;
+}>(), {
+    initialYaw: 0,
+    posterSrc: '',
+    posterClass: '',
+    posterAlt: '',
+    hint: 'take it by the rim — drag to see every side, scroll to lean in',
 });
 
-const well = ref(null);
+const well = ref<HTMLElement | null>(null);
 const ready = ref(false);
 const spun = ref(false);
-let handle = null;
+let handle: WheelMount | null = null;
 
 onMounted(async () => {
     try {
         // lazy, like the old front's `import('/static/potters-wheel.js')` —
         // three.js stays out of the shell bundle until a piece needs turning
-        const {mountWheel} = await import('../lib/potters-wheel.js');
-        handle = mountWheel(well.value, props.glbUrl, {
+        const {mountWheel} = await import('../lib/potters-wheel');
+        handle = mountWheel(well.value!, props.glbUrl, {
             initialYaw: props.initialYaw,
             reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
         });

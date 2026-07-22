@@ -1,20 +1,26 @@
-<script setup>
+<script setup lang="ts">
 import {TextInput} from '@script-development/ui-inputs';
 import {computed, nextTick, ref, watch} from 'vue';
 import CanisterCard from '../components/CanisterCard.vue';
 import FilterPills from '../components/FilterPills.vue';
-import {canisterChips, filterArchive, ROOMS} from '../lib/canisters.js';
-import {archive, loadArchive} from '../stores/archive.js';
-import {castAsLead, leadRes, loadFoleySources, openTab} from '../stores/booth.js';
+import {canisterChips, filterArchive, ROOMS} from '../lib/canisters';
+import type {ShelfItem} from '../lib/canisters';
+import {archive, loadArchive} from '../stores/archive';
+import {castAsLead, leadRes, loadFoleySources, openTab} from '../stores/booth';
 
-const props = defineProps({active: {type: Boolean, default: false}});
+const props = withDefaults(defineProps<{active?: boolean}>(), {active: false});
+
+interface ShelfAct {
+    label: string;
+    run: (act: ShelfAct) => void | Promise<void>;
+}
 
 const search = ref('');
 const room = ref('');
 const kind = ref('');
-const mounted = ref(null);
-const acts = ref([]);
-const view = ref(null);
+const mounted = ref<ShelfItem | null>(null);
+const acts = ref<ShelfAct[]>([]);
+const view = ref<HTMLElement | null>(null);
 
 const items = computed(() => filterArchive(archive.value, {room: room.value, kind: kind.value, search: search.value}));
 const filtered = computed(() => Boolean(room.value || kind.value || search.value.trim()));
@@ -33,11 +39,11 @@ const capText = computed(() => {
     return `${cue}${it.name} · ${label} `;
 });
 
-function buildActs(it) {
-    const rows = [];
+function buildActs(it: ShelfItem): ShelfAct[] {
+    const rows: ShelfAct[] = [];
     if (it.meta?.prompt) {
         rows.push({label: 'Copy the cue', run: act => {
-            navigator.clipboard.writeText(it.meta.prompt);
+            navigator.clipboard.writeText(it.meta!.prompt!);
             act.label = 'Cue copied';
         }});
     }
@@ -64,7 +70,7 @@ function buildActs(it) {
     return rows;
 }
 
-async function mountCanister(it) {
+async function mountCanister(it: ShelfItem) {
     mounted.value = it;
     acts.value = buildActs(it);
     await nextTick();

@@ -1,9 +1,9 @@
-<script setup>
+<script setup lang="ts">
 import {NumberInput, SingleSelect, Textarea} from '@script-development/ui-inputs';
 import {computed, onMounted, ref} from 'vue';
 import ThumbRow from '../components/ThumbRow.vue';
-import {api} from '../composables/useBoothApi.js';
-import {facePrompt, forgeLead, leadRes, openTab, pickedImage, stagePrompt} from '../stores/booth.js';
+import {api} from '../composables/useBoothApi';
+import {facePrompt, forgeLead, leadRes, openTab, pickedImage, stagePrompt} from '../stores/booth';
 
 const TARGETS = [
     {t: 'wan', label: 'Stage · motion', stamp: 'stage · motion'},
@@ -11,15 +11,22 @@ const TARGETS = [
     {t: 'relay', label: 'Relay · timed', stamp: 'relay · timed'},
 ];
 
+interface CueCard {
+    n: number;
+    text: string;
+    target: string;
+    lead: string | null;
+}
+
 const idea = ref('');
 const target = ref('wan');
 const variants = ref(3);
 const voice = ref('');
-const voices = ref([]);
+const voices = ref<{name: string; label: string}[]>([]);
 const busy = ref(false);
 const error = ref('');
-const cards = ref([]);
-const room = ref(null);
+const cards = ref<CueCard[]>([]);
+const room = ref<HTMLElement | null>(null);
 
 async function strike() {
     error.value = '';
@@ -31,43 +38,43 @@ async function strike() {
     try {
         const lead = forgeLead.value;
         const t = target.value;
-        const {variants: texts} = await api('/api/forge', {
+        const {variants: texts} = await api<{variants: string[]}>('/api/forge', {
             target: t, idea: idea.value.trim(), variants: Number(variants.value),
             image: lead, model: voice.value || undefined,
         });
         cards.value = texts.map((text, i) => ({n: i + 1, text, target: t, lead}));
     } catch (e) {
-        error.value = e.message || String(e);
+        error.value = (e as Error).message || String(e);
     }
     busy.value = false;
 }
 
-const stampFor = card => {
-    const base = TARGETS.find(x => x.t === card.target).stamp;
+const stampFor = (card: CueCard) => {
+    const base = TARGETS.find(x => x.t === card.target)!.stamp;
     return card.lead ? `${base} · sighted` : base;
 };
-const copyCue = text => navigator.clipboard.writeText(text);
+const copyCue = (text: string) => navigator.clipboard.writeText(text);
 
-function cueStage(card) {
+function cueStage(card: CueCard) {
     stagePrompt.value = card.text;
     if (card.lead) {
         pickedImage.value = card.lead;
-        const t = room.value?.querySelector(`.thumbrow img[title="${CSS.escape(card.lead)}"]`);
+        const t = room.value?.querySelector<HTMLImageElement>(`.thumbrow img[title="${CSS.escape(card.lead)}"]`);
         if (t?.naturalWidth) leadRes.value = {w: t.naturalWidth, h: t.naturalHeight};
     }
     openTab('stage');
 }
-function cueFace(card) {
+function cueFace(card: CueCard) {
     facePrompt.value = card.text;
     openTab('face');
 }
-const pickLead = name => {
+const pickLead = (name: string) => {
     forgeLead.value = forgeLead.value === name ? null : name;
 };
 
 async function loadVoices() {
     try {
-        const {models, default_text, default_vision} = await api('/api/forge/models');
+        const {models, default_text, default_vision} = await api<{models: string[]; default_text?: string; default_vision?: string}>('/api/forge/models');
         voices.value = models.map(name => ({
             name,
             label: name + (name === default_text ? ' · house text voice'

@@ -1,21 +1,36 @@
-<script setup>
+<script setup lang="ts">
 import {Checkbox, NumberInput, TextInput} from '@script-development/ui-inputs';
 import {onUnmounted, ref, watch} from 'vue';
 import LogWell from '../components/LogWell.vue';
-import {api} from '../composables/useBoothApi.js';
+import {api} from '../composables/useBoothApi';
 
-const props = defineProps({active: {type: Boolean, default: false}});
+interface ShiftRow {
+    id: string;
+    status: string;
+    subject: string | string[];
+    variant_count: number;
+    takes_done: number;
+    reason?: string;
+}
+
+interface ShiftList {
+    rows: ShiftRow[];
+    shift: {running?: boolean};
+    log_tail?: string[];
+}
+
+const props = withDefaults(defineProps<{active?: boolean}>(), {active: false});
 
 const subject = ref('');
 const k = ref(1);
 const twoSided = ref(false);
-const rows = ref([]);
+const rows = ref<ShiftRow[]>([]);
 const running = ref(false);
-const logLines = ref([]);
+const logLines = ref<string[]>([]);
 const logShown = ref(false);
 const error = ref('');
 
-function renderShift({rows: list, shift, log_tail}) {
+function renderShift({rows: list, shift, log_tail}: ShiftList) {
     rows.value = list;
     running.value = Boolean(shift.running);
     if (log_tail?.length) {
@@ -27,21 +42,21 @@ function renderShift({rows: list, shift, log_tail}) {
 async function loadShift() {
     error.value = '';
     try {
-        renderShift(await api('/api/queue/list'));
+        renderShift(await api<ShiftList>('/api/queue/list'));
     } catch (e) {
-        error.value = e.message || String(e);
+        error.value = (e as Error).message || String(e);
     }
 }
 
 // the call sheet refreshes every 3 s while the room is open
-let timer = null;
+let timer: ReturnType<typeof setInterval> | undefined;
 watch(() => props.active, a => {
     clearInterval(timer);
     if (!a) return;
     loadShift();
     timer = setInterval(async () => {
         try {
-            renderShift(await api('/api/queue/list'));
+            renderShift(await api<ShiftList>('/api/queue/list'));
         } catch {
             // next tick retries
         }
@@ -49,17 +64,17 @@ watch(() => props.active, a => {
 }, {immediate: true});
 onUnmounted(() => clearInterval(timer));
 
-const progress = r => (r.status === 'queued' ? '—'
+const progress = (r: ShiftRow) => (r.status === 'queued' ? '—'
     : `take ${Math.min(r.takes_done + (r.status === 'firing' ? 1 : 0), r.variant_count)}/${r.variant_count}`);
-const subjectText = r => (Array.isArray(r.subject) ? r.subject.join(' · ') : r.subject);
+const subjectText = (r: ShiftRow) => (Array.isArray(r.subject) ? r.subject.join(' · ') : r.subject);
 
-async function handle(fn) {
+async function handle(fn: () => Promise<unknown>) {
     error.value = '';
     try {
         await fn();
         loadShift();
     } catch (e) {
-        error.value = e.message || String(e);
+        error.value = (e as Error).message || String(e);
     }
 }
 

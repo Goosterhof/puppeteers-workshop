@@ -1,29 +1,70 @@
-<script setup>
+<script setup lang="ts">
 import {NumberInput, SingleSelect, Textarea} from '@script-development/ui-inputs';
 import {computed, onMounted, onUnmounted, ref, watch} from 'vue';
 import LogWell from '../components/LogWell.vue';
 import StampedMount from '../components/StampedMount.vue';
 import ThumbRow from '../components/ThumbRow.vue';
-import {api} from '../composables/useBoothApi.js';
-import {createJobPoller} from '../composables/useJobPoller.js';
-import {loadArchive} from '../stores/archive.js';
-import {castAsLead, leadRes, loadFoleySources, openTab, pickedImage, stagePrompt} from '../stores/booth.js';
-import {nearestResolution, RES_PRESETS} from '../lib/resolution.js';
+import {api} from '../composables/useBoothApi';
+import {createJobPoller} from '../composables/useJobPoller';
+import {loadArchive} from '../stores/archive';
+import {castAsLead, leadRes, loadFoleySources, openTab, pickedImage, stagePrompt} from '../stores/booth';
+import {nearestResolution, RES_PRESETS} from '../lib/resolution';
 
-const KIND_LABEL = {i2v: 'image → video', t2v: 'text → video', swap: 'motion transfer', t2i: 'text → image'};
-const LEAD_LABEL = {
+interface Performer {
+    type: string;
+    name: string;
+    kind: string;
+    resolution: string;
+    video_length: number;
+    steps: number;
+    guidance: number;
+    note?: string;
+    loras: string[];
+}
+
+interface Garment {
+    name: string;
+    on: boolean;
+    mult: number;
+}
+
+interface StageJob {
+    state?: string;
+    log_tail?: string[];
+    outputs?: string[];
+    exit_code?: number;
+    model?: string;
+    seed?: number;
+    loras?: string[];
+}
+
+interface TakeAct {
+    label: string;
+    run: (ctx: {relabel: (label: string) => void}) => Promise<void>;
+}
+
+interface TakeMount {
+    url: string;
+    kind: string;
+    title: string;
+    meta: {model?: string; seed?: number; loras: string[]};
+    acts: TakeAct[];
+}
+
+const KIND_LABEL: Record<string, string> = {i2v: 'image → video', t2v: 'text → video', swap: 'motion transfer', t2i: 'text → image'};
+const LEAD_LABEL: Record<string, string> = {
     i2v: 'The lead — start image (footage/)',
     t2v: 'The lead — optional: hand it a start image, or let it work from text alone',
     swap: 'The lead — the character to animate (footage/)',
     t2i: 'The lead — optional: pick a source to repaint (img2img at the strength below), or paint from text alone',
 };
 
-const models = ref([]);
+const models = ref<Performer[]>([]);
 const modelType = ref('');
-const guides = ref({footage: [], stage: []});
+const guides = ref<{footage: string[]; stage: string[]}>({footage: [], stage: []});
 const guide = ref('');
-const garments = ref([]);
-const resOptions = ref(RES_PRESETS.video);
+const garments = ref<Garment[]>([]);
+const resOptions = ref<string[]>(RES_PRESETS.video);
 const resolution = ref('704x1280');
 const length = ref(41);
 const strength = ref(0.6);
@@ -32,9 +73,9 @@ const guidance = ref(1);
 const seed = ref(7);
 const note = ref('Wan 2.2 i2v Enhanced Lightning 14B — the identity-holding recipe from the bell-swing arc. First run after cold start adds model-load minutes.');
 const error = ref('');
-const logLines = ref([]);
+const logLines = ref<string[]>([]);
 const logShown = ref(false);
-const results = ref(null);
+const results = ref<TakeMount[] | null>(null);
 
 const performer = () => models.value.find(m => m.type === modelType.value);
 const kind = computed(() => performer()?.kind);
@@ -76,28 +117,28 @@ watch(leadRes, v => {
 
 async function loadModels() {
     try {
-        const {models: list, default: def} = await api('/api/stage/models');
+        const {models: list, default: def} = await api<{models: Performer[]; default?: string}>('/api/stage/models');
         models.value = list;
         if (def) modelType.value = def;
         else applyPerformer();
     } catch (e) {
-        error.value = e.message || String(e);
+        error.value = (e as Error).message || String(e);
     }
 }
 
 async function loadGuides() {
     const keep = guide.value;
-    guides.value = await api('/api/foley/sources');
+    guides.value = await api<{footage: string[]; stage: string[]}>('/api/foley/sources');
     const known = [...guides.value.stage.map(n => `stage:${n}`), ...guides.value.footage.map(n => `footage:${n}`)];
     guide.value = known.includes(keep) ? keep : '';
 }
 
-const pickThumb = name => {
+const pickThumb = (name: string) => {
     pickedImage.value = pickedImage.value === name ? null : name;
 };
 const donned = () => {
-    const loras = [];
-    const mults = [];
+    const loras: string[] = [];
+    const mults: number[] = [];
     for (const g of garments.value) {
         if (g.on) {
             loras.push(g.name);
@@ -107,7 +148,7 @@ const donned = () => {
     return {loras, mults};
 };
 
-function validate(m) {
+function validate(m: Performer | undefined) {
     if (!m) return 'No performer selected — the playbill may still be loading.';
     if ((m.kind === 'i2v' || m.kind === 'swap') && !pickedImage.value) {
         return m.kind === 'swap'
@@ -120,7 +161,7 @@ function validate(m) {
 
 async function cue() {
     error.value = '';
-    const m = performer();
+    const m = performer() as Performer; // validate() rejects the undefined case before use
     const objection = validate(m);
     if (objection) {
         error.value = objection;
@@ -142,11 +183,11 @@ async function cue() {
         logShown.value = true;
         poller.start();
     } catch (e) {
-        error.value = e.message || String(e);
+        error.value = (e as Error).message || String(e);
     }
 }
 
-function takeMount(f, job) {
+function takeMount(f: string, job: StageJob): TakeMount {
     const image = /\.(png|jpe?g|webp)$/i.test(f);
     return {
         url: `/stage-output/${encodeURIComponent(f)}`,
@@ -167,7 +208,7 @@ function takeMount(f, job) {
 }
 
 const poller = createJobPoller({
-    fetchJob: () => api('/api/stage/job'),
+    fetchJob: () => api<StageJob>('/api/stage/job'),
     intervalMs: 3000,
     onTick: job => {
         logLines.value = job.log_tail || [];
@@ -189,7 +230,7 @@ onMounted(async () => {
     loadModels();
     // resume watching if a take is already running when the room opens
     try {
-        const job = await api('/api/stage/job');
+        const job = await api<StageJob>('/api/stage/job');
         if (job.state === 'running') {
             logShown.value = true;
             poller.start();
@@ -211,7 +252,7 @@ onUnmounted(poller.stop);
     />
     <label class="field" for="stage-prompt">The cue</label>
     <Textarea id="stage-prompt" v-model="stagePrompt" />
-    <label id="stage-lead-label" class="field">{{ LEAD_LABEL[kind] || 'The lead' }}</label>
+    <label id="stage-lead-label" class="field">{{ LEAD_LABEL[kind ?? ''] || 'The lead' }}</label>
     <ThumbRow id="thumbs" :picked="pickedImage" @pick="pickThumb" />
     <div v-show="kind === 'swap'" id="stage-guide-row">
       <label class="field" for="stage-guide">The choreography — the driving video whose motion the character re-performs</label>

@@ -9,8 +9,25 @@
 // createJobPoller is deliberately framework-free so the contract is unit-
 // testable with fake timers; rooms wire it up inside their own lifecycle.
 
-export function createJobPoller({fetchJob, intervalMs = 3000, missTolerance = 3, onTick, onSettled, onLost}) {
-    let timer = null;
+export interface JobPollerOptions<J extends {state?: string}> {
+    fetchJob: () => Promise<J>;
+    intervalMs?: number;
+    missTolerance?: number;
+    onTick?: (job: J) => void;
+    onSettled?: (job: J) => void;
+    onLost?: (err: unknown) => void;
+}
+
+export interface JobPoller {
+    start: () => void;
+    stop: () => void;
+    readonly running: boolean;
+}
+
+export function createJobPoller<J extends {state?: string}>(
+    {fetchJob, intervalMs = 3000, missTolerance = 3, onTick, onSettled, onLost}: JobPollerOptions<J>,
+): JobPoller {
+    let timer: ReturnType<typeof setInterval> | null = null;
     let misses = 0;
 
     const stop = () => {
@@ -19,7 +36,7 @@ export function createJobPoller({fetchJob, intervalMs = 3000, missTolerance = 3,
     };
 
     const beat = async () => {
-        let job;
+        let job: J;
         try {
             job = await fetchJob();
             misses = 0;

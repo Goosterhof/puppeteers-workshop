@@ -1,28 +1,28 @@
-import {mount} from '@vue/test-utils';
+import {mount, type DOMWrapper} from '@vue/test-utils';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import RackRoom from '../src/rooms/RackRoom.vue';
-import {slugify} from '../src/lib/slugify.js';
+import {slugify} from '../src/lib/slugify';
 
 // The Curing Rack's contract (#00063 Phase 4): three verdicts, the
 // spotlight's wheel lifecycle, the break-pit's three exits, and the
 // 500 ms strip cadence frozen under reduced motion.
 
 const {apiMock, wheelHandles, mountWheelMock} = vi.hoisted(() => {
-    const handles = [];
+    const handles: Array<{ready: Promise<void>; dispose: ReturnType<typeof vi.fn<() => void>>}> = [];
     return {
-        apiMock: vi.fn(),
+        apiMock: vi.fn<(path: string, body?: unknown) => Promise<unknown>>(),
         wheelHandles: handles,
-        mountWheelMock: vi.fn(() => {
-            const handle = {ready: Promise.resolve(), dispose: vi.fn()};
+        mountWheelMock: vi.fn<(container: HTMLElement, glbUrl: string, opts?: {initialYaw?: number; reducedMotion?: boolean}) => {ready: Promise<void>; dispose: () => void}>(() => {
+            const handle = {ready: Promise.resolve(), dispose: vi.fn<() => void>()};
             handles.push(handle);
             return handle;
         }),
     };
 });
-vi.mock('../src/composables/useBoothApi.js', () => ({api: apiMock}));
-vi.mock('../src/lib/potters-wheel.js', () => ({mountWheel: mountWheelMock}));
+vi.mock('../src/composables/useBoothApi', () => ({api: apiMock}));
+vi.mock('../src/lib/potters-wheel', () => ({mountWheel: mountWheelMock}));
 
-const candidate = (id, over = {}) => ({
+const candidate = (id: string, over: Record<string, unknown> = {}) => ({
     id,
     frames: [0, 1, 2, 3, 4, 5, 6, 7].map(n => `${id}/turn/00${n}.png`),
     qa: {passed: true},
@@ -31,8 +31,8 @@ const candidate = (id, over = {}) => ({
     ...over,
 });
 
-const routes = overrides => path => {
-    const table = {
+const routes = (overrides: Record<string, unknown> = {}) => (path: string): Promise<unknown> => {
+    const table: Record<string, unknown> = {
         '/api/rack/list': {candidates: [candidate('c1'), candidate('c2')]},
         '/api/rack/approve': {ok: true},
         '/api/rack/refire': {ok: true},
@@ -48,7 +48,7 @@ const boot = async () => {
     await vi.advanceTimersByTimeAsync(0);
     return wrapper;
 };
-const discardOf = card => card.find('.acts .breaker');
+const discardOf = (card: DOMWrapper<Element>) => card.find('.acts .breaker');
 
 describe('RackRoom', () => {
     beforeEach(() => {
@@ -101,7 +101,7 @@ describe('RackRoom', () => {
         // off the wheel — the handle disposes with the card
         await wrapper.find('#rack-view .candidate .acts .act:last-child').trigger('click');
         await vi.advanceTimersByTimeAsync(0);
-        expect(wheelHandles[0].dispose).toHaveBeenCalledTimes(1);
+        expect(wheelHandles[0]!.dispose).toHaveBeenCalledTimes(1);
         expect(wrapper.find('#rack-view .candidate').exists()).toBe(false);
         wrapper.unmount();
     });
@@ -110,7 +110,7 @@ describe('RackRoom', () => {
         const wrapper = await boot();
         const card = wrapper.find('#rack-grid .candidate');
         await card.find('.acts .fire').trigger('click');
-        const input = card.find('.approve-row input');
+        const input = card.find<HTMLInputElement>('.approve-row input');
         expect(input.element.value).toBe(slugify('label c1'));
 
         await input.setValue('Bad Name!');
@@ -163,7 +163,7 @@ describe('RackRoom', () => {
         ]}}));
         const wrapper = await boot();
         expect(wrapper.find('#rack-grid .candidate').classes()).toContain('mended');
-        await wrapper.vm.loadRack?.();
+        await (wrapper.vm as unknown as {loadRack?: () => Promise<void>}).loadRack?.();
         wrapper.unmount();
     });
 });

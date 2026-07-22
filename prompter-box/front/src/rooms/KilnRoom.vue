@@ -1,26 +1,43 @@
-<script setup>
+<script setup lang="ts">
 import {Checkbox, NumberInput, Textarea} from '@script-development/ui-inputs';
 import {onMounted, onUnmounted, ref} from 'vue';
 import LogWell from '../components/LogWell.vue';
 import PottersWheel from '../components/PottersWheel.vue';
-import {api} from '../composables/useBoothApi.js';
-import {createJobPoller} from '../composables/useJobPoller.js';
-import {openTab} from '../stores/booth.js';
+import {api} from '../composables/useBoothApi';
+import {createJobPoller} from '../composables/useJobPoller';
+import {openTab} from '../stores/booth';
+
+interface KilnCandidate {
+    id: string;
+    subject: string;
+    seed: number;
+    orient_hint: string;
+    octree: number;
+    two_sided?: boolean;
+    refire_count?: number;
+}
+
+interface KilnJob {
+    state?: string;
+    log_tail?: string[];
+    candidate?: KilnCandidate;
+    error?: string;
+}
 
 const subject = ref('');
 const twoSided = ref(false);
 const octree = ref(128);
 const threshold = ref(0.5);
-const seed = ref(null); // null = the kiln picks (NumberInput's honest empty)
+const seed = ref<number | null>(null); // null = the kiln picks (NumberInput's honest empty)
 const busy = ref(false);
 const error = ref('');
-const logLines = ref([]);
+const logLines = ref<string[]>([]);
 const logShown = ref(false);
-const candidate = ref(null);
+const candidate = ref<KilnCandidate | null>(null);
 const fired = ref(false);
 
 const poller = createJobPoller({
-    fetchJob: () => api('/api/kiln/job'),
+    fetchJob: () => api<KilnJob>('/api/kiln/job'),
     intervalMs: 3000,
     onTick: job => {
         logLines.value = job.log_tail || [];
@@ -57,12 +74,12 @@ async function fire() {
         poller.start();
     } catch (e) {
         busy.value = false;
-        error.value = e.message || String(e);
+        error.value = (e as Error).message || String(e);
     }
 }
 
-const chipRows = c => {
-    const rows = [[`seed ${c.seed}`, 'chip'], [c.orient_hint, 'chip']];
+const chipRows = (c: KilnCandidate): [string, string][] => {
+    const rows: [string, string][] = [[`seed ${c.seed}`, 'chip'], [c.orient_hint, 'chip']];
     rows.push(c.refire_count ? [`refired · ${c.octree}`, 'chip scar'] : [`octree ${c.octree}`, 'chip']);
     if (c.two_sided) rows.push(['two-sided', 'chip']);
     return rows;
@@ -71,7 +88,7 @@ const chipRows = c => {
 onMounted(async () => {
     // resume watching if a firing is already burning when the room opens
     try {
-        const job = await api('/api/kiln/job');
+        const job = await api<KilnJob>('/api/kiln/job');
         if (job.state === 'running') {
             logShown.value = true;
             busy.value = true;

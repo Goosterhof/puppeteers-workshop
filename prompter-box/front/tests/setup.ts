@@ -21,11 +21,15 @@ globalThis.ResizeObserver ??= class {
 // jsdom carries no matchMedia — the booth reads it for the reduced-motion
 // gates. `globalThis.__reducedMotion` lets a spec flip the preference.
 globalThis.__reducedMotion = false;
-window.matchMedia = query => ({
+window.matchMedia = (query: string): MediaQueryList => ({
     media: query,
     get matches() {
         return query.includes('prefers-reduced-motion') ? globalThis.__reducedMotion : false;
     },
+    onchange: null,
+    addListener() {},
+    removeListener() {},
     addEventListener() {},
     removeEventListener() {},
+    dispatchEvent: () => false,
 });

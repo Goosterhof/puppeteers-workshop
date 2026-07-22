@@ -1,12 +1,12 @@
 import {describe, expect, it} from 'vitest';
-import {stageLoad, stationReads, stationState} from '../src/lib/stationState.js';
+import {stageLoad, stationReads, stationState, type StatusPayload} from '../src/lib/stationState';
 
 // The callboard's state grammar as a tested contract — the exact mapping the
 // single-file front carried in stationState()/poll() (#00063 §1B).
 
-const darkStatus = () => ({
+const darkStatus = (): StatusPayload => ({
     forge: {up: false, loaded: []},
-    face_shop: {up: false},
+    face_shop: {up: false} as StatusPayload['face_shop'],
     stage_job: {state: 'idle'},
     stage_ui: {up: false},
     foley: {installed: false},
@@ -82,7 +82,7 @@ describe('stationState', () => {
         expect(stationReads(held, st).kiln).toBe('the full UI holds the GPU');
 
         const warm = darkStatus();
-        warm.face_shop = {up: true};
+        warm.face_shop = {up: true} as StatusPayload['face_shop'];
         expect(stationState(warm).kiln).toBe('ready');
     });
 
@@ -95,7 +95,7 @@ describe('stationState', () => {
 
     it('face: a warm ComfyUI is standby', () => {
         const s = darkStatus();
-        s.face_shop = {up: true};
+        s.face_shop = {up: true} as StatusPayload['face_shop'];
         expect(stationState(s).face).toBe('standby');
     });
 });

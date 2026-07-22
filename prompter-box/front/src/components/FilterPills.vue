@@ -1,9 +1,11 @@
-<script setup>
-defineProps({
-    options: {type: Array, required: true},
-    modelValue: {type: String, default: ''},
+<script setup lang="ts">
+withDefaults(defineProps<{
+    options: {value: string; label: string}[];
+    modelValue?: string;
+}>(), {
+    modelValue: '',
 });
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits<{'update:modelValue': [value: string]}>();
 </script>
 
 <template>

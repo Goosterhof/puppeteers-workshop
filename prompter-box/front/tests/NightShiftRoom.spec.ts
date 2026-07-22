@@ -5,11 +5,11 @@ import NightShiftRoom from '../src/rooms/NightShiftRoom.vue';
 // The Night Shift's five wirings (#00063 Phase 4): add, remove, reorder,
 // start, stop — plus the semicolon grammar and the running-shift lock.
 
-const {apiMock} = vi.hoisted(() => ({apiMock: vi.fn()}));
-vi.mock('../src/composables/useBoothApi.js', () => ({api: apiMock}));
+const {apiMock} = vi.hoisted(() => ({apiMock: vi.fn<(path: string, body?: unknown) => Promise<unknown>>()}));
+vi.mock('../src/composables/useBoothApi', () => ({api: apiMock}));
 
-const routes = overrides => path => {
-    const table = {
+const routes = (overrides: Record<string, unknown> = {}) => (path: string): Promise<unknown> => {
+    const table: Record<string, unknown> = {
         '/api/queue/list': {rows: [
             {id: 'r1', status: 'queued', subject: 'a terracotta pot', variant_count: 2, takes_done: 0},
         ], shift: {running: false}, log_tail: []},
@@ -55,7 +55,7 @@ describe('NightShiftRoom', () => {
         expect(apiMock).toHaveBeenCalledWith('/api/queue/add', {
             subject: ['a kettle', 'a ladder', 'a gnome'], variant_count: 3, job_type: 'kiln', two_sided: false,
         });
-        expect(wrapper.find('#shift-subject').element.value).toBe('');
+        expect(wrapper.find<HTMLInputElement>('#shift-subject').element.value).toBe('');
         wrapper.unmount();
     });
 
@@ -70,9 +70,9 @@ describe('NightShiftRoom', () => {
     it('reorder and remove ride the row id; start and stop flip the shift', async () => {
         const wrapper = await boot();
         const handles = wrapper.findAll('.order .handles .act');
-        await handles[0].trigger('click');
-        await handles[1].trigger('click');
-        await handles[2].trigger('click');
+        await handles[0]!.trigger('click');
+        await handles[1]!.trigger('click');
+        await handles[2]!.trigger('click');
         await vi.advanceTimersByTimeAsync(0);
         expect(apiMock).toHaveBeenCalledWith('/api/queue/reorder', {row_id: 'r1', direction: 'up'});
         expect(apiMock).toHaveBeenCalledWith('/api/queue/reorder', {row_id: 'r1', direction: 'down'});
@@ -92,7 +92,7 @@ describe('NightShiftRoom', () => {
             shift: {running: true}, log_tail: ['firing r1'],
         }}));
         const wrapper = await boot();
-        const start = wrapper.find('#shift-start');
+        const start = wrapper.find<HTMLButtonElement>('#shift-start');
         expect(start.text()).toBe('The shift is on the floor');
         expect(start.element.disabled).toBe(true);
         expect(wrapper.find('.order').attributes('data-status')).toBe('firing');

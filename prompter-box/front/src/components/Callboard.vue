@@ -1,9 +1,10 @@
-<script setup>
+<script setup lang="ts">
 import {ref} from 'vue';
-import {useStatusHeartbeat} from '../composables/useStatusHeartbeat.js';
+import {useStatusHeartbeat} from '../composables/useStatusHeartbeat';
+import type {LampState, StationName} from '../lib/stationState';
 
 // The five station plates, in wiring order — the blackout cools them L→R.
-const PLATES = [
+const PLATES: {id: StationName; pos: string; cue: string}[] = [
     {id: 'forge', pos: 'Forge', cue: 'Promptsmith · Ollama'},
     {id: 'face', pos: 'Face Shop', cue: 'ComfyUI'},
     {id: 'stage', pos: 'Stage', cue: 'Wan2GP'},
@@ -17,7 +18,7 @@ const evictLabel = ref('Clear the boards');
 
 // The Face Shop reads "warm" on standby (the model is resident, not idle-cold)
 // and a live lamp shouts — same word choices as the single-file front.
-const stateWord = (id, state) =>
+const stateWord = (id: StationName, state: LampState) =>
     state === 'standby' && id === 'face' ? 'warm' : state === 'live' ? 'LIVE' : state;
 
 async function clearTheBoards() {

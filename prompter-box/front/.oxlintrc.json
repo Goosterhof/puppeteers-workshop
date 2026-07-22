@@ -1,20 +1,21 @@
 {
     "$schema": "./node_modules/oxlint/configuration_schema.json",
-    "plugins": ["import", "unicorn", "promise", "vue", "vitest"],
+    "plugins": ["import", "unicorn", "promise", "vue", "vitest", "typescript"],
     "categories": {"correctness": "error"},
     "env": {"builtin": true, "browser": true, "es2024": true},
     "ignorePatterns": [
         "coverage/**",
         "node_modules/**",
         "scripts/**",
-        "vite.config.js",
-        "vitest.config.js",
+        "vite.config.ts",
+        "vitest.config.ts",
         "uno.config.ts",
-        "src/lib/potters-wheel.js"
+        "src/lib/potters-wheel.ts"
     ],
     "rules": {
-        // Core rules — the war-room defaults, minus the TypeScript layer
-        // (the Proscenium is plain JS by design, #00063 §1A)
+        // Core rules — the war-room defaults, TypeScript layer included
+        // (the Proscenium crossed from plain JS to TS at the investor's cue,
+        // 2026-07-22 — vue-tsc is the type gate, oxlint stays the style gate)
         "no-console": "warn",
         "prefer-const": "error",
         "eqeqeq": "error",
@@ -86,7 +87,7 @@
         // Vitest
         "vitest/no-conditional-tests": "error",
         "vitest/no-import-node-test": "error",
-        "vitest/consistent-test-filename": ["warn", {"pattern": ".*\\.spec\\.js$"}]
+        "vitest/consistent-test-filename": ["warn", {"pattern": ".*\\.spec\\.ts$"}]
     },
     "overrides": [
         {"files": ["*.vue"], "rules": {"no-undef": "off"}},
@@ -96,11 +97,11 @@
             // behavior parity is the acceptance contract). The ternary/if
             // chains ARE the contract; splitting them to duck a ceiling would
             // change the thing the tests pin down.
-            "files": ["src/lib/stationState.js", "src/lib/canisters.js"],
+            "files": ["src/lib/stationState.ts", "src/lib/canisters.ts"],
             "rules": {"complexity": "off"}
         },
         {
-            "files": ["tests/**", "**/*.spec.js"],
+            "files": ["tests/**", "**/*.spec.ts"],
             "rules": {
                 "max-lines-per-function": "off",
                 "max-nested-callbacks": "off",

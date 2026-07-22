@@ -1,16 +1,16 @@
 import {mount} from '@vue/test-utils';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import FaceRoom from '../src/rooms/FaceRoom.vue';
-import {facePrompt, faceSitter} from '../src/stores/booth.js';
+import {facePrompt, faceSitter} from '../src/stores/booth';
 
 // The Face Shop's contract (#00063 Phase 3): the sitter flips the room into
 // EDIT mode, the poll speaks 'painting', and a rejection names the brush.
 
-const {apiMock} = vi.hoisted(() => ({apiMock: vi.fn()}));
-vi.mock('../src/composables/useBoothApi.js', () => ({api: apiMock}));
+const {apiMock} = vi.hoisted(() => ({apiMock: vi.fn<(path: string, body?: unknown) => Promise<unknown>>()}));
+vi.mock('../src/composables/useBoothApi', () => ({api: apiMock}));
 
-const routes = overrides => path => {
-    const table = {
+const routes = (overrides: Record<string, unknown> = {}) => (path: string): Promise<unknown> => {
+    const table: Record<string, unknown> = {
         '/api/face/models': {painters: ['flux-2-klein-9b.gguf', 'flux-2-dev.gguf'], default: 'flux-2-klein-9b.gguf'},
         '/api/face/generate': {prompt_id: 'p1'},
         '/api/face/result/p1': {state: 'painting'},
@@ -40,11 +40,11 @@ describe('FaceRoom', () => {
 
     it('a sitter locks width and height — the output follows the sitter', async () => {
         const wrapper = await boot();
-        expect(wrapper.find('#face-w').element.disabled).toBe(false);
+        expect(wrapper.find<HTMLInputElement>('#face-w').element.disabled).toBe(false);
         faceSitter.value = 'crier.png';
         await vi.advanceTimersByTimeAsync(0);
-        expect(wrapper.find('#face-w').element.disabled).toBe(true);
-        expect(wrapper.find('#face-h').element.disabled).toBe(true);
+        expect(wrapper.find<HTMLInputElement>('#face-w').element.disabled).toBe(true);
+        expect(wrapper.find<HTMLInputElement>('#face-h').element.disabled).toBe(true);
         wrapper.unmount();
     });
 
@@ -62,7 +62,7 @@ describe('FaceRoom', () => {
             model: 'flux-2-klein-9b.gguf',
             source: 'crier.png',
         });
-        expect(wrapper.find('#face-go').element.disabled).toBe(true);
+        expect(wrapper.find<HTMLButtonElement>('#face-go').element.disabled).toBe(true);
         wrapper.unmount();
     });
 
@@ -81,7 +81,7 @@ describe('FaceRoom', () => {
         expect(mountEl.text()).toContain('a pizza box');
         expect(mountEl.text()).toContain('flux-2-klein-9b');
         expect(mountEl.text()).not.toContain('.gguf');
-        expect(wrapper.find('#face-go').element.disabled).toBe(false);
+        expect(wrapper.find<HTMLButtonElement>('#face-go').element.disabled).toBe(false);
         wrapper.unmount();
     });
 
