@@ -1,5 +1,6 @@
 <script setup>
-import {onMounted, onUnmounted, ref} from 'vue';
+import {NumberInput, SingleSelect, TextInput, Textarea} from '@script-development/ui-inputs';
+import {computed, onMounted, onUnmounted, ref} from 'vue';
 import LogWell from '../components/LogWell.vue';
 import StampedMount from '../components/StampedMount.vue';
 import {api} from '../composables/useBoothApi.js';
@@ -9,6 +10,13 @@ import {foleyReel, foleySources, loadFoleySources} from '../stores/booth.js';
 
 const prompt = ref('');
 const negative = ref('music, background music, melody');
+// no-reel rides as a real option (id '') — a picked reel must stay clearable,
+// exactly like the old empty <option>
+const reelOptions = computed(() => [
+    {id: '', label: '— no reel: pure text-to-audio —'},
+    ...foleySources.value.stage.map(n => ({id: `stage:${n}`, label: `stage · ${n}`})),
+    ...foleySources.value.footage.map(n => ({id: `footage:${n}`, label: `footage · ${n}`})),
+]);
 const duration = ref(8);
 const seed = ref(7);
 const error = ref('');
@@ -78,21 +86,17 @@ onUnmounted(poller.stop);
 <template>
   <div class="panel">
     <label class="field" for="foley-prompt">The cue — what should it sound like</label>
-    <textarea id="foley-prompt" v-model="prompt" placeholder="a man screams in terror as he falls, classic movie stock scream"></textarea>
+    <Textarea id="foley-prompt" v-model="prompt" placeholder="a man screams in terror as he falls, classic movie stock scream" />
     <label class="field" for="foley-video">The reel — optional: score a video (audio lands ON the motion)</label>
-    <select id="foley-video" v-model="foleyReel">
-      <option value="">— no reel: pure text-to-audio —</option>
-      <optgroup v-if="foleySources.stage.length" label="Stage takes">
-        <option v-for="n in foleySources.stage" :key="n" :value="`stage:${n}`">{{ n }}</option>
-      </optgroup>
-      <optgroup v-if="foleySources.footage.length" label="Footage">
-        <option v-for="n in foleySources.footage" :key="n" :value="`footage:${n}`">{{ n }}</option>
-      </optgroup>
-    </select>
+    <SingleSelect
+      id="foley-video" v-model="foleyReel"
+      :options="reelOptions" label="label" :alphabetical-sort="false"
+      options-label="The reels — stage takes, then footage"
+    />
     <div class="row" style="margin-top:14px">
-      <div><label class="field" for="foley-neg">Negative cue</label><input id="foley-neg" v-model="negative" type="text"></div>
-      <div><label class="field" for="foley-dur">Seconds</label><input id="foley-dur" v-model="duration" type="number" min="1" max="30" step="1"></div>
-      <div><label class="field" for="foley-seed">Seed</label><input id="foley-seed" v-model="seed" type="number"></div>
+      <div><label class="field" for="foley-neg">Negative cue</label><TextInput id="foley-neg" v-model="negative" /></div>
+      <div><label class="field" for="foley-dur">Seconds</label><NumberInput id="foley-dur" v-model="duration" :min="1" :max="30" :step="1" /></div>
+      <div><label class="field" for="foley-seed">Seed</label><NumberInput id="foley-seed" v-model="seed" /></div>
       <div><button id="foley-go" class="fire" style="margin-top:0" @click="cue">Cue the foley booth</button></div>
     </div>
     <p class="note">MMAudio (T2A + V2A) — with a reel picked, the sync module watches the frames and the duration snaps to the clip; without one, 8&nbsp;s is the trained sweet spot (trim the sting after). The "music" negative cue earns its seat — the model loves to score things unasked. ~6&nbsp;GB VRAM; weights CC-BY-NC — internal tooling only (runbook).</p>

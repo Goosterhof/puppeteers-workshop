@@ -1,4 +1,5 @@
 <script setup>
+import {TextInput} from '@script-development/ui-inputs';
 import {computed, nextTick, ref, watch} from 'vue';
 import CanisterCard from '../components/CanisterCard.vue';
 import FilterPills from '../components/FilterPills.vue';
@@ -81,7 +82,7 @@ watch(() => props.active, a => {
     <div class="row">
       <div style="flex:2;min-width:220px">
         <label class="field" for="arch-search">Search the shelves — filename, prompt slug, seed</label>
-        <input id="arch-search" v-model="search" type="text" placeholder="seed7, crier, flask…">
+        <TextInput id="arch-search" v-model="search" placeholder="seed7, crier, flask…" />
       </div>
       <div>
         <label class="field">Room</label>

@@ -58,7 +58,9 @@ describe('FoleyRoom', () => {
     it('a picked reel fires video-to-audio — the stage take rides video/video_from', async () => {
         const wrapper = mount(FoleyRoom);
         await vi.advanceTimersByTimeAsync(0);
-        await wrapper.find('#foley-video').setValue('stage:take-seed7.webm');
+        // the reel shelf is a ui-inputs SingleSelect — open, then commit
+        await wrapper.find('#foley-video').trigger('click');
+        await wrapper.findAll('.ui-select__option').find(o => o.text() === 'stage · take-seed7.webm').trigger('click');
         await wrapper.find('#foley-prompt').setValue('the bell scores itself');
         await fire(wrapper);
 

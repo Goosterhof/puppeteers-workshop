@@ -9,6 +9,15 @@ HTMLDialogElement.prototype.close ??= function () {
 };
 Element.prototype.scrollIntoView ??= function () {};
 
+// jsdom carries no ResizeObserver — ui-inputs' floating listbox (autoUpdate)
+// asks for one when a select menu opens. A no-op observer is enough: the
+// specs assert commits, not pixel positions.
+globalThis.ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+};
+
 // jsdom carries no matchMedia — the booth reads it for the reduced-motion
 // gates. `globalThis.__reducedMotion` lets a spec flip the preference.
 globalThis.__reducedMotion = false;

@@ -1,4 +1,5 @@
 <script setup>
+import {NumberInput, TextInput} from '@script-development/ui-inputs';
 import {onUnmounted, ref, watch} from 'vue';
 import LogWell from '../components/LogWell.vue';
 import {api} from '../composables/useBoothApi.js';
@@ -82,14 +83,14 @@ const add = () => handle(async () => {
     <div class="row">
       <div style="flex:3;min-width:220px">
         <label class="field" for="shift-subject">Add an order — a subject phrase</label>
-        <input id="shift-subject" v-model="subject" type="text" placeholder="terracotta geraniums in a weathered pot">
+        <TextInput id="shift-subject" v-model="subject" placeholder="terracotta geraniums in a weathered pot" />
       </div>
       <div style="max-width:90px">
         <label class="field" for="shift-k" title="K seed-varied takes of one subject, or list K phrases for K different props">K</label>
-        <input
-          id="shift-k" v-model="k" type="number" min="1" max="12"
+        <NumberInput
+          id="shift-k" v-model="k" :min="1" :max="12"
           title="K seed-varied takes of one subject, or list K phrases for K different props"
-        >
+        />
       </div>
       <div style="max-width:150px">
         <label class="sided" style="margin-top:0"><input id="shift-two-sided" v-model="twoSided" type="checkbox"> 2-sided</label>

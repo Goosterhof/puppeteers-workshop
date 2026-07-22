@@ -94,13 +94,10 @@ export default defineConfig({
         /* ---- shared booth grammar: panels, fields, pills, the fire button ---- */
         .panel { background: var(--drape); border: 1px solid var(--drape-edge); border-radius: 3px; padding: 22px; }
         label.field { display: block; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; margin: 14px 0 5px; }
-        textarea, input[type=number], input[type=text], select {
-          width: 100%; background: var(--booth); color: var(--paper);
-          border: 1px solid var(--drape-edge); border-radius: 2px;
-          font: 14px var(--typed); padding: 9px 11px;
-        }
-        textarea { min-height: 84px; resize: vertical; }
-        textarea:focus, input:focus, select:focus, button:focus-visible { outline: 2px solid var(--lamp-dim); outline-offset: 1px; }
+        /* text/number/textarea/select controls are ui-inputs atoms now — their
+           chrome lives on the --ui-* contract in src/ui-inputs-map.css; only
+           the native holdouts (checkboxes) and buttons keep element rules */
+        input[type=checkbox]:focus, button:focus-visible { outline: 2px solid var(--lamp-dim); outline-offset: 1px; }
         .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
         .row > div { flex: 1; min-width: 110px; }
         .pills { display: flex; gap: 6px; flex-wrap: wrap; }
