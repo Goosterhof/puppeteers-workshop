@@ -129,6 +129,73 @@ export default defineConfig({
         .thumbrow img:hover, .thumbrow video:hover { opacity: 1; }
         .thumbrow img.picked { border-color: var(--lamp); opacity: 1; }
 
+        /* ---- The Prompt Book: the folio scope (#00064 Phase A) ----
+           The deck is a lit prompt-book page inside a dark booth. Archive
+           canon (light-locale-in-dark-system): re-map the semantic aliases
+           on the page root so every room's token-reading CSS inverts with
+           zero room-file edits. Primitives (--page, --ink-*) exist so the
+           remap never chases its own tail (--drape reads --page, not the
+           remapped --paper). */
+        .folio-page {
+          --page: #efe6d2;
+          --page-shade: #e0d4ba;
+          --ink-soft: color-mix(in srgb, #2b241b 64%, #efe6d2);
+          --ink-hair: color-mix(in srgb, #2b241b 24%, #efe6d2);
+          /* the remap: dark aliases land on paper */
+          --booth: var(--page);
+          --drape: var(--page);
+          --drape-edge: var(--ink-hair);
+          --plate-face: var(--page);
+          --plate-edge: var(--ink-soft);
+          --paper: var(--ink);          /* bright text becomes ink; --ink itself is never remapped */
+          --paper-shade: var(--page-shade);
+          --dim: var(--ink-soft);
+          --stage-off: var(--page-shade);
+          --meter-well: var(--page-shade);
+          background: var(--page); color: var(--ink);
+        }
+        /* the six shared-grammar rules, inverted for print */
+        .folio-page .panel {
+          background: var(--page); border: 1px solid var(--ink);
+          box-shadow: 0 0 0 4px var(--page), 0 0 0 5px var(--ink-hair);
+        }
+        .folio-page label.field { color: var(--ink-soft); }
+        .folio-page .fire { background: var(--ink); color: var(--page); }
+        .folio-page .fire:hover { background: #1c1712; filter: none; }
+        .folio-page .fire:disabled { background: var(--ink-soft); }
+        .folio-page .fire.danger { background: var(--tattered); color: var(--page); }
+        .folio-page .pills button { background: var(--page); border-color: var(--ink-soft); color: var(--ink-soft); }
+        .folio-page .pills button[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
+        .folio-page .note a { color: var(--ember); }
+        .folio-page .thumbrow img, .folio-page .thumbrow video { opacity: .88; }
+        .folio-page .thumbrow img.picked { border-color: var(--ember); }
+        /* the ui-inputs atoms: the --ui-* map bakes its var()s at :root
+           (custom-property substitution is computed-value-time on the
+           declaring element), so the folio re-declares the map — remapping
+           the base tokens alone can never reach it */
+        .folio-page {
+          --ui-label-color: var(--ink-soft);
+          --ui-control-bg: var(--page);
+          --ui-control-bg-disabled: var(--page-shade);
+          --ui-control-text: var(--ink);
+          --ui-control-text-muted: var(--ink-soft);
+          --ui-control-border-color: var(--ink-soft);
+          --ui-control-border-open: var(--ink);
+          --ui-menu-bg: var(--page);
+          --ui-menu-border-color: var(--ink-soft);
+          --ui-menu-shadow: 0 8px 24px rgba(43, 36, 27, 0.25);
+          --ui-option-bg-active: var(--page-shade);
+          --ui-check-border-color: var(--ink-soft);
+          --ui-check-bg: var(--page);
+          --ui-check-bg-checked: var(--ink);
+          --ui-check-mark-color: var(--page);
+        }
+        /* log wells stay dark — tipped-in photographs on the folio */
+        .folio-page .log-well {
+          --meter-well: #0d0b08; --booth: #17130f; --drape-edge: #33291d;
+          --dim: #9a8b74; --paper: #efe6d2;
+        }
+
         @media (prefers-reduced-motion: reduce) {
           *, *::before, *::after {
             animation-duration: .01ms !important;
