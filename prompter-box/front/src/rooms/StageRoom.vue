@@ -1,4 +1,5 @@
 <script setup>
+import {NumberInput, SingleSelect, Textarea} from '@script-development/ui-inputs';
 import {computed, onMounted, onUnmounted, ref, watch} from 'vue';
 import LogWell from '../components/LogWell.vue';
 import StampedMount from '../components/StampedMount.vue';
@@ -39,6 +40,18 @@ const performer = () => models.value.find(m => m.type === modelType.value);
 const kind = computed(() => performer()?.kind);
 const isImage = computed(() => kind.value === 't2i');
 
+// the playbill, the choreography shelf, and the resolution presets as
+// SingleSelect options — source order preserved, no alphabetizing
+const modelOptions = computed(() => models.value.map(m => ({
+    id: m.type, label: `${m.name} · ${KIND_LABEL[m.kind] || m.kind}`,
+})));
+const guideOptions = computed(() => [
+    {id: '', label: '— pick the choreography —'},
+    ...guides.value.stage.map(n => ({id: `stage:${n}`, label: `stage · ${n}`})),
+    ...guides.value.footage.map(n => ({id: `footage:${n}`, label: `footage · ${n}`})),
+]);
+const resSelectOptions = computed(() => resOptions.value.map(r => ({id: r, label: r})));
+
 function applyPerformer() {
     const m = performer();
     if (!m) return;
@@ -49,7 +62,7 @@ function applyPerformer() {
     steps.value = m.steps;
     guidance.value = m.guidance;
     note.value = m.note || `${m.name} — enumerated fresh from the workshop floor.`;
-    garments.value = m.loras.map(name => ({name, on: false, mult: '1.0'}));
+    garments.value = m.loras.map(name => ({name, on: false, mult: 1}));
     if (m.kind === 'swap') loadGuides();
 }
 watch(modelType, applyPerformer);
@@ -191,45 +204,45 @@ onUnmounted(poller.stop);
 <template>
   <div class="panel">
     <label class="field" for="stage-model">The performer — every model with weights on the floor</label>
-    <select id="stage-model" v-model="modelType">
-      <option v-for="m in models" :key="m.type" :value="m.type">{{ m.name }} · {{ KIND_LABEL[m.kind] || m.kind }}</option>
-    </select>
+    <SingleSelect
+      id="stage-model" v-model="modelType"
+      :options="modelOptions" label="label" :alphabetical-sort="false"
+      placeholder="— the playbill loads… —" options-label="The performers on the playbill"
+    />
     <label class="field" for="stage-prompt">The cue</label>
-    <textarea id="stage-prompt" v-model="stagePrompt"></textarea>
+    <Textarea id="stage-prompt" v-model="stagePrompt" />
     <label id="stage-lead-label" class="field">{{ LEAD_LABEL[kind] || 'The lead' }}</label>
     <ThumbRow id="thumbs" :picked="pickedImage" @pick="pickThumb" />
     <div v-show="kind === 'swap'" id="stage-guide-row">
       <label class="field" for="stage-guide">The choreography — the driving video whose motion the character re-performs</label>
-      <select id="stage-guide" v-model="guide">
-        <option value="">— pick the choreography —</option>
-        <optgroup v-if="guides.stage.length" label="Stage takes">
-          <option v-for="n in guides.stage" :key="n" :value="`stage:${n}`">{{ n }}</option>
-        </optgroup>
-        <optgroup v-if="guides.footage.length" label="Footage">
-          <option v-for="n in guides.footage" :key="n" :value="`footage:${n}`">{{ n }}</option>
-        </optgroup>
-      </select>
+      <SingleSelect
+        id="stage-guide" v-model="guide"
+        :options="guideOptions" label="label" :alphabetical-sort="false"
+        options-label="The driving videos — stage takes, then footage"
+      />
     </div>
     <div v-show="garments.length" id="stage-lora-row">
       <label class="field">The wardrobe — LoRAs on this performer's shelf (click to don, then set the strength)</label>
       <div id="stage-loras" class="lorarack">
         <div v-for="g in garments" :key="g.name" class="garment">
           <button :title="g.name" :data-lora="g.name" :aria-pressed="g.on" @click="g.on = !g.on">{{ g.name.replace(/\.safetensors$/i, '') }}</button>
-          <input v-model="g.mult" type="number" step="0.05" :disabled="!g.on" title="strength">
+          <NumberInput :id="`stage-lora-mult-${g.name}`" v-model="g.mult" :step="0.05" :disabled="!g.on" title="strength" />
         </div>
       </div>
       <p id="stage-lora-note" class="note">Accelerator LoRAs (FastWan and kin) usually want few steps and guidance 1 — the knobs below are yours.</p>
     </div>
     <div class="row" style="margin-top:14px">
       <div><label class="field" for="stage-res">Resolution</label>
-        <select id="stage-res" v-model="resolution">
-          <option v-for="r in resOptions" :key="r">{{ r }}</option>
-        </select></div>
-      <div v-show="!isImage" id="stage-len-wrap"><label class="field" for="stage-len">Frames</label><input id="stage-len" v-model="length" type="number" min="9" step="4"></div>
-      <div v-show="isImage" id="stage-strength-wrap"><label class="field" for="stage-strength">Strength</label><input id="stage-strength" v-model="strength" type="number" min="0.05" max="1" step="0.05"></div>
-      <div><label class="field" for="stage-steps">Steps</label><input id="stage-steps" v-model="steps" type="number" min="1" max="100"></div>
-      <div><label class="field" for="stage-guidance">Guidance</label><input id="stage-guidance" v-model="guidance" type="number" min="0" step="0.5"></div>
-      <div><label class="field" for="stage-seed">Seed</label><input id="stage-seed" v-model="seed" type="number"></div>
+        <SingleSelect
+          id="stage-res" v-model="resolution"
+          :options="resSelectOptions" label="label" :alphabetical-sort="false"
+          options-label="The resolution presets"
+        /></div>
+      <div v-show="!isImage" id="stage-len-wrap"><label class="field" for="stage-len">Frames</label><NumberInput id="stage-len" v-model="length" :min="9" :step="4" /></div>
+      <div v-show="isImage" id="stage-strength-wrap"><label class="field" for="stage-strength">Strength</label><NumberInput id="stage-strength" v-model="strength" :min="0.05" :max="1" :step="0.05" /></div>
+      <div><label class="field" for="stage-steps">Steps</label><NumberInput id="stage-steps" v-model="steps" :min="1" :max="100" /></div>
+      <div><label class="field" for="stage-guidance">Guidance</label><NumberInput id="stage-guidance" v-model="guidance" :min="0" :step="0.5" /></div>
+      <div><label class="field" for="stage-seed">Seed</label><NumberInput id="stage-seed" v-model="seed" /></div>
       <div><button id="stage-go" class="fire" style="margin-top:0" @click="cue">Cue the stage</button></div>
     </div>
     <p id="stage-note" class="note">{{ note }}</p>

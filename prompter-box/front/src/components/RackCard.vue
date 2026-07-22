@@ -1,4 +1,5 @@
 <script setup>
+import {NumberInput, TextInput} from '@script-development/ui-inputs';
 import {computed, onUnmounted, ref} from 'vue';
 import PottersWheel from './PottersWheel.vue';
 import {api} from '../composables/useBoothApi.js';
@@ -126,13 +127,13 @@ async function refire() {
         <button v-if="onWheel" class="act" @click="emit('spotlight')">✕ Off the wheel</button>
       </div>
       <div v-if="mode === 'approve'" class="approve-row">
-        <input v-model="packName" type="text" :style="{borderColor: nameOk ? '' : 'var(--tattered)'}">
+        <TextInput :id="`pack-name-${entry.id}`" v-model="packName" :invalid="!nameOk" />
         <button class="fire" style="margin-top:0" @click="shelve">Shelve it</button>
       </div>
       <template v-if="mode === 'refire'">
         <div class="refire-row">
-          <input v-model="refOctree" type="number" step="16" title="octree">
-          <input v-model="refThreshold" type="number" step="0.05" title="threshold">
+          <NumberInput :id="`refire-octree-${entry.id}`" v-model="refOctree" :step="16" title="octree" />
+          <NumberInput :id="`refire-threshold-${entry.id}`" v-model="refThreshold" :step="0.05" title="threshold" />
           <button class="act" :disabled="refiring" @click="refire">{{ refiring ? 'Refiring…' : 'Refire' }}</button>
         </div>
         <p class="qa-line refire-note">Same painting, new firing — a full repaint starts back at the Kiln.</p>

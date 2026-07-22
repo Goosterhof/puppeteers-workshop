@@ -40,6 +40,15 @@ const boot = async () => {
     return wrapper;
 };
 
+// the selects are ui-inputs SingleSelects now — a pick is open-then-commit
+// through the listbox, the way a hand would do it
+const pick = async (wrapper, id, optionLabel) => {
+    await wrapper.find(`#${id}`).trigger('click');
+    const option = wrapper.findAll('.ui-select__option').find(o => o.text() === optionLabel);
+    await option.trigger('click');
+    await vi.advanceTimersByTimeAsync(0);
+};
+
 describe('StageRoom', () => {
     beforeEach(() => {
         vi.useFakeTimers();
@@ -55,8 +64,8 @@ describe('StageRoom', () => {
 
     it('the playbill applies the performer: presets, knobs, wardrobe, note', async () => {
         const wrapper = await boot();
-        expect(wrapper.find('#stage-model').element.value).toBe('i2v_14b');
-        expect(wrapper.find('#stage-res').element.value).toBe('704x1280');
+        expect(wrapper.find('#stage-model').text()).toContain('Wan 2.2 i2v 14B');
+        expect(wrapper.find('#stage-res').text()).toContain('704x1280');
         expect(wrapper.find('#stage-steps').element.value).toBe('4');
         expect(wrapper.findAll('.garment')).toHaveLength(2);
         expect(wrapper.find('#stage-note').text()).toBe('the house recipe');
@@ -72,8 +81,7 @@ describe('StageRoom', () => {
 
     it('a swap cue without choreography names the performer', async () => {
         const wrapper = await boot();
-        await wrapper.find('#stage-model').setValue('scail');
-        await vi.advanceTimersByTimeAsync(0);
+        await pick(wrapper, 'stage-model', 'SCAIL-2 · motion transfer');
         pickedImage.value = 'crier.png';
         await wrapper.find('#stage-go').trigger('click');
         expect(wrapper.find('.error').text()).toBe('SCAIL-2 needs choreography — pick a driving video.');
@@ -105,15 +113,14 @@ describe('StageRoom', () => {
         const wrapper = await boot();
         leadRes.value = {w: 1920, h: 1080};
         await vi.advanceTimersByTimeAsync(0);
-        expect(wrapper.find('#stage-res').element.value).toBe('1280x720');
+        expect(wrapper.find('#stage-res').text()).toContain('1280x720');
         expect(leadRes.value).toBeNull();
         wrapper.unmount();
     });
 
     it('a t2i performer swaps frames for strength', async () => {
         const wrapper = await boot();
-        await wrapper.find('#stage-model').setValue('krea');
-        await vi.advanceTimersByTimeAsync(0);
+        await pick(wrapper, 'stage-model', 'Krea 2 · text → image');
         expect(wrapper.find('#stage-len-wrap').isVisible()).toBe(false);
         expect(wrapper.find('#stage-strength-wrap').isVisible()).toBe(true);
         wrapper.unmount();

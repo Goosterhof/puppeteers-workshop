@@ -1,5 +1,6 @@
 <script setup>
-import {onMounted, ref} from 'vue';
+import {NumberInput, SingleSelect, Textarea} from '@script-development/ui-inputs';
+import {computed, onMounted, ref} from 'vue';
 import ThumbRow from '../components/ThumbRow.vue';
 import {api} from '../composables/useBoothApi.js';
 import {facePrompt, forgeLead, leadRes, openTab, pickedImage, stagePrompt} from '../stores/booth.js';
@@ -76,6 +77,13 @@ async function loadVoices() {
         // forge cold — the booth decides, as ever
     }
 }
+
+// booth-decides rides as a real option (id '') — picking a voice must stay
+// reversible, exactly like the old empty <option>
+const voiceOptions = computed(() => [
+    {id: '', label: '— the booth decides —'},
+    ...voices.value.map(v => ({id: v.name, label: v.label})),
+]);
 onMounted(loadVoices);
 </script>
 
@@ -83,7 +91,7 @@ onMounted(loadVoices);
   <div ref="room">
     <div class="panel">
       <label class="field" for="idea">The rough idea</label>
-      <textarea id="idea" v-model="idea" placeholder="illustrated town crier mascot — the bell in his chest alcove swings and rings; scroll stays still…"></textarea>
+      <Textarea id="idea" v-model="idea" placeholder="illustrated town crier mascot — the bell in his chest alcove swings and rings; scroll stays still…" />
       <label class="field">The lead — optional; gives the Promptsmith eyes (click to pick, click again to clear)</label>
       <ThumbRow id="forge-thumbs" :picked="forgeLead" @pick="pickLead" />
       <div class="row" style="margin-top:14px">
@@ -99,14 +107,15 @@ onMounted(loadVoices);
         </div>
         <div style="max-width:110px">
           <label class="field" for="variants">Variants</label>
-          <input id="variants" v-model="variants" type="number" min="1" max="6">
+          <NumberInput id="variants" v-model="variants" :min="1" :max="6" />
         </div>
         <div style="max-width:230px">
           <label class="field" for="forge-model">The voice</label>
-          <select id="forge-model" v-model="voice">
-            <option value="">— the booth decides —</option>
-            <option v-for="v in voices" :key="v.name" :value="v.name">{{ v.label }}</option>
-          </select>
+          <SingleSelect
+            id="forge-model" v-model="voice"
+            :options="voiceOptions" label="label" :alphabetical-sort="false"
+            options-label="The voices on the Ollama shelf"
+          />
         </div>
         <div style="max-width:210px">
           <button id="strike" class="fire" style="margin-top:0" :disabled="busy" @click="strike">{{ busy ? 'Forging…' : 'Strike the forge' }}</button>

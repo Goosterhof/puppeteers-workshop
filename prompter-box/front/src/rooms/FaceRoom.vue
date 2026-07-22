@@ -1,5 +1,6 @@
 <script setup>
-import {onMounted, onUnmounted, ref} from 'vue';
+import {NumberInput, SingleSelect, Textarea} from '@script-development/ui-inputs';
+import {computed, onMounted, onUnmounted, ref} from 'vue';
 import StampedMount from '../components/StampedMount.vue';
 import ThumbRow from '../components/ThumbRow.vue';
 import {api} from '../composables/useBoothApi.js';
@@ -10,6 +11,7 @@ import {nearestResolution} from '../lib/resolution.js';
 
 const painters = ref([]);
 const painter = ref('');
+const painterOptions = computed(() => painters.value.map(name => ({id: name, label: name})));
 const width = ref(768);
 const height = ref(1024);
 const seed = ref(7);
@@ -108,17 +110,19 @@ async function cue() {
 <template>
   <div class="panel">
     <label class="field" for="face-model">The painter — from ComfyUI's storeroom</label>
-    <select id="face-model" v-model="painter">
-      <option v-for="name in painters" :key="name" :value="name">{{ name }}</option>
-    </select>
+    <SingleSelect
+      id="face-model" v-model="painter"
+      :options="painterOptions" label="label" :alphabetical-sort="false"
+      placeholder="— the storeroom answers… —" options-label="The painters in the storeroom"
+    />
     <label class="field" for="face-prompt">The cue</label>
-    <textarea id="face-prompt" v-model="facePrompt"></textarea>
+    <Textarea id="face-prompt" v-model="facePrompt" />
     <label class="field">The sitter — optional: an image to EDIT; the cue then describes the change (click to pick, click again to clear)</label>
     <ThumbRow id="face-thumbs" :picked="faceSitter" @pick="pickSitter" />
     <div class="row" style="margin-top:14px">
-      <div><label class="field" for="face-w">Width</label><input id="face-w" v-model="width" type="number" step="16" :disabled="!!faceSitter"></div>
-      <div><label class="field" for="face-h">Height</label><input id="face-h" v-model="height" type="number" step="16" :disabled="!!faceSitter"></div>
-      <div><label class="field" for="face-seed">Seed</label><input id="face-seed" v-model="seed" type="number"></div>
+      <div><label class="field" for="face-w">Width</label><NumberInput id="face-w" v-model="width" :step="16" :disabled="!!faceSitter" /></div>
+      <div><label class="field" for="face-h">Height</label><NumberInput id="face-h" v-model="height" :step="16" :disabled="!!faceSitter" /></div>
+      <div><label class="field" for="face-seed">Seed</label><NumberInput id="face-seed" v-model="seed" /></div>
       <div><button id="face-go" class="fire" style="margin-top:0" :disabled="busy" @click="cue">Cue the face shop</button></div>
     </div>
     <p class="note">The house painter is Flux 2 Klein 9B, 4-step distilled — a take lands in seconds once warm. With a sitter picked the painter EDITS instead of painting fresh (the night-crier ReferenceLatent recipe): the cue describes the change — "repaint him as…", "replace the background with…", "swap the woman into…" — and width/height follow the sitter. The qwen3 text encoder and flux2 VAE are bolted to the easel, so only Flux 2 family painters will pair; drop new ones in <code>ComfyUI/models/diffusion_models/</code> and they appear here. (Krea 2 paints via the Stage — pick it a lead and it repaints at the strength knob.)</p>

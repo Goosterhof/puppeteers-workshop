@@ -1,4 +1,5 @@
 <script setup>
+import {Checkbox, NumberInput, Textarea} from '@script-development/ui-inputs';
 import {onMounted, onUnmounted, ref} from 'vue';
 import LogWell from '../components/LogWell.vue';
 import PottersWheel from '../components/PottersWheel.vue';
@@ -10,7 +11,7 @@ const subject = ref('');
 const twoSided = ref(false);
 const octree = ref(128);
 const threshold = ref(0.5);
-const seed = ref('');
+const seed = ref(null); // null = the kiln picks (NumberInput's honest empty)
 const busy = ref(false);
 const error = ref('');
 const logLines = ref([]);
@@ -48,7 +49,7 @@ async function fire() {
             octree: Number(octree.value) || 128,
             threshold: Number(threshold.value) || 0.5,
             two_sided: twoSided.value,
-            seed: seed.value === '' ? undefined : Number(seed.value),
+            seed: seed.value ?? undefined,
         });
         candidate.value = null;
         fired.value = true;
@@ -87,24 +88,23 @@ onUnmounted(poller.stop);
 <template>
   <div class="panel">
     <label class="field" for="kiln-subject">What are we firing?</label>
-    <textarea id="kiln-subject" v-model="subject" placeholder="a black omafiets leaning at a slight angle"></textarea>
-    <label class="sided"><input id="kiln-two-sided" v-model="twoSided" type="checkbox">
-      Two-sided — declare asymmetry; the room won't guess</label>
+    <Textarea id="kiln-subject" v-model="subject" placeholder="a black omafiets leaning at a slight angle" />
+    <Checkbox id="kiln-two-sided" v-model="twoSided" label="Two-sided — declare asymmetry; the room won't guess" />
     <details class="kiln-settings">
       <summary>Kiln settings · the defaults are the prop-dressing laws</summary>
       <div class="row">
         <div><label class="field" for="kiln-octree">Octree</label>
-          <input id="kiln-octree" v-model="octree" type="number" min="16" max="512" step="16">
+          <NumberInput id="kiln-octree" v-model="octree" :min="16" :max="512" :step="16" />
           <p class="knob-note">The carving grid — how finely the mesher subdivides space.
             Higher keeps thin parts (chair legs, spokes) from shredding, but fires slower
             and the GLB weighs more. A firing that tatters at 128 auto-refires at 224.</p></div>
         <div><label class="field" for="kiln-threshold">Threshold</label>
-          <input id="kiln-threshold" v-model="threshold" type="number" min="0.1" max="1" step="0.05">
+          <NumberInput id="kiln-threshold" v-model="threshold" :min="0.1" :max="1" :step="0.05" />
           <p class="knob-note">Where the skin gets drawn in the voxel field. Lower is more
             generous — thin features survive as material; higher cuts tighter and can eat
             them. The auto-refire softens to 0.4 for exactly that reason.</p></div>
         <div><label class="field" for="kiln-seed">Seed</label>
-          <input id="kiln-seed" v-model="seed" type="number" placeholder="the kiln picks">
+          <NumberInput id="kiln-seed" v-model="seed" placeholder="the kiln picks" />
           <p class="knob-note">The dice — one seed steers both the painting and the mesh,
             so the same subject with the same seed fires the same prop again. Leave it
             blank and the kiln rolls fresh every firing.</p></div>
@@ -155,7 +155,6 @@ details.kiln-settings .knob-note {
   margin: 6px 0 0; max-width: 250px;
   font-size: 11.5px; font-style: italic; color: var(--dim); line-height: 1.55;
 }
-.sided { display: flex; align-items: center; gap: 8px; margin-top: 12px;
-         font-size: 12px; letter-spacing: .06em; }
-.sided input { accent-color: var(--lamp); }
+/* the .sided checkbox grammar moved to src/ui-inputs-map.css (.ui-check) —
+   the Checkbox atom is the row now, lamp fill via --ui-check-bg-checked */
 </style>
