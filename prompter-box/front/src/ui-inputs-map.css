@@ -1,0 +1,61 @@
+/*
+ * The booth's --ui-* map — @script-development/ui-inputs atoms wear the
+ * Prompter's Box grammar (ADR-0043). Var-to-var onto the booth tokens the
+ * uno.config.ts preflight declares; never a baked hex where a token exists.
+ * The values mirror the old shared control rule (background var(--booth),
+ * 1px var(--drape-edge) border, 2px radius, 9px/11px padding, typed voice)
+ * so the atoms land pixel-faithful to the element rule they replace.
+ */
+:root {
+    /* field / label — the label.field grammar, for when FormField arrives */
+    --ui-field-gap: 5px;
+    --ui-field-margin: 14px 0 0;
+    --ui-label-color: var(--dim);
+    --ui-label-size: 11px;
+    --ui-label-weight: 400;
+    --ui-label-transform: uppercase;
+    --ui-label-tracking: 0.16em;
+
+    /* control — input, textarea, select trigger */
+    --ui-control-bg: var(--booth);
+    --ui-control-bg-disabled: var(--stage-off);
+    --ui-control-text: var(--paper);
+    --ui-control-text-muted: var(--dim);
+    --ui-control-font-size: 14px;
+    --ui-control-border-width: 1px;
+    --ui-control-border-color: var(--drape-edge);
+    --ui-control-border-open: var(--lamp);
+    --ui-control-radius: 2px;
+    --ui-control-pad-x: 11px;
+    --ui-control-pad-y: 9px;
+    --ui-focus-ring: 0 0 0 2px var(--lamp-dim);
+
+    /* listbox menu — the popup the native select never had */
+    --ui-menu-bg: var(--drape);
+    --ui-menu-border-color: var(--drape-edge);
+    --ui-menu-radius: 2px;
+    --ui-menu-pad: 4px;
+    --ui-menu-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+    --ui-option-radius: 2px;
+    --ui-option-pad: 7px 11px;
+    --ui-option-bg-active: var(--drape-edge);
+
+    /* error / danger — the booth flags with a tattered border, no glow */
+    --ui-danger-text: var(--cue-red);
+    --ui-danger-border: var(--tattered);
+    --ui-danger-shadow: none;
+    --ui-error-size: 13px;
+}
+
+/* The one axis the --ui-* contract has no hook for (font-family; the package
+   inherits it): the booth's controls speak the typed voice while the body
+   speaks --body. Same specificity as the package rule — source order after
+   the package sheet decides, so this import must follow style.css. */
+.ui-control {
+    font-family: var(--typed);
+}
+
+/* The old element rule's textarea floor, re-homed on the package class. */
+.ui-textarea {
+    min-height: 84px;
+}
