@@ -1,5 +1,5 @@
 <script setup>
-import {NumberInput, Textarea} from '@script-development/ui-inputs';
+import {Checkbox, NumberInput, Textarea} from '@script-development/ui-inputs';
 import {onMounted, onUnmounted, ref} from 'vue';
 import LogWell from '../components/LogWell.vue';
 import PottersWheel from '../components/PottersWheel.vue';
@@ -89,8 +89,7 @@ onUnmounted(poller.stop);
   <div class="panel">
     <label class="field" for="kiln-subject">What are we firing?</label>
     <Textarea id="kiln-subject" v-model="subject" placeholder="a black omafiets leaning at a slight angle" />
-    <label class="sided"><input id="kiln-two-sided" v-model="twoSided" type="checkbox">
-      Two-sided — declare asymmetry; the room won't guess</label>
+    <Checkbox id="kiln-two-sided" v-model="twoSided" label="Two-sided — declare asymmetry; the room won't guess" />
     <details class="kiln-settings">
       <summary>Kiln settings · the defaults are the prop-dressing laws</summary>
       <div class="row">
@@ -156,7 +155,6 @@ details.kiln-settings .knob-note {
   margin: 6px 0 0; max-width: 250px;
   font-size: 11.5px; font-style: italic; color: var(--dim); line-height: 1.55;
 }
-.sided { display: flex; align-items: center; gap: 8px; margin-top: 12px;
-         font-size: 12px; letter-spacing: .06em; }
-.sided input { accent-color: var(--lamp); }
+/* the .sided checkbox grammar moved to src/ui-inputs-map.css (.ui-check) —
+   the Checkbox atom is the row now, lamp fill via --ui-check-bg-checked */
 </style>

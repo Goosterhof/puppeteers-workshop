@@ -1,5 +1,5 @@
 <script setup>
-import {NumberInput, TextInput} from '@script-development/ui-inputs';
+import {Checkbox, NumberInput, TextInput} from '@script-development/ui-inputs';
 import {onUnmounted, ref, watch} from 'vue';
 import LogWell from '../components/LogWell.vue';
 import {api} from '../composables/useBoothApi.js';
@@ -93,7 +93,7 @@ const add = () => handle(async () => {
         />
       </div>
       <div style="max-width:150px">
-        <label class="sided" style="margin-top:0"><input id="shift-two-sided" v-model="twoSided" type="checkbox"> 2-sided</label>
+        <Checkbox id="shift-two-sided" v-model="twoSided" label="2-sided" />
       </div>
       <div style="max-width:110px"><button id="shift-add" class="fire" style="margin-top:0" @click="add">+ Add</button></div>
       <div style="max-width:220px">

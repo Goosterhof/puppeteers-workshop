@@ -40,6 +40,18 @@
     --ui-option-pad: 7px 11px;
     --ui-option-bg-active: var(--drape-edge);
 
+    /* check — the two-sided declarations; lamp fill with an ink mark, the
+       same reading the old accent-color: var(--lamp) natives gave. Switch
+       vars stay derived from the control map until a Switch consumer exists. */
+    --ui-check-size: 15px;
+    --ui-check-border-width: 1px;
+    --ui-check-border-color: var(--drape-edge);
+    --ui-check-bg: var(--booth);
+    --ui-check-bg-checked: var(--lamp);
+    --ui-check-mark-color: var(--ink);
+    --ui-check-radius: 2px;
+    --ui-check-gap: 8px;
+
     /* error / danger — the booth flags with a tattered border, no glow */
     --ui-danger-text: var(--cue-red);
     --ui-danger-border: var(--tattered);
@@ -58,4 +70,17 @@
 /* The old element rule's textarea floor, re-homed on the package class. */
 .ui-textarea {
     min-height: 84px;
+}
+
+/* The old .sided checkbox-row grammar, re-homed on the atom's root — dim
+   voice at 12px with the booth's tracking; rows (.row) align at flex-end
+   and cancel the top margin, generalizing the old inline override. */
+.ui-check {
+    margin-top: 12px;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    color: var(--dim);
+}
+.row .ui-check {
+    margin-top: 0;
 }
