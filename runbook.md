@@ -157,6 +157,15 @@ The front is **TypeScript** (2026-07-22, investor's cue — supersedes
 cutover): strict `vue-tsc` (Mezzanine-grade tsconfig, `noUncheckedIndexedAccess`
 included) is the type gate, oxlint stays the style gate, and `npm run build`
 type-checks before it bundles — a type error now fails the drift guard too.
+The layout is **the Prompt Book** (#00064, 2026-07-22, ruled from the
+3-variant audition in `front/auditions/` — spec + mocks committed there):
+folio deck left (rooms invert to ink-on-paper via the `.folio-page`
+alias remap — no room-file edits; the `--ui-*` map re-declares under the
+scope because custom-property var()s bake at `:root`), binder rail right
+(four wings, dog-eared active tab, overflow-visible on purpose — a scroll
+container would clip the jut), typed footlight ledger along the bottom
+(LIVE by value, no pulse; same heartbeat/evict contract). The window
+never scrolls — the folio does.
 
 - **Forge** — the Promptsmith in a panel: idea → cue cards, each with
   copy / "Cue the stage" / "Cue the face shop" buttons. A **voice dropdown**
