@@ -1,12 +1,27 @@
-<script setup>
+<script setup lang="ts">
 import {NumberInput, SingleSelect, TextInput, Textarea} from '@script-development/ui-inputs';
 import {computed, onMounted, onUnmounted, ref} from 'vue';
 import LogWell from '../components/LogWell.vue';
 import StampedMount from '../components/StampedMount.vue';
-import {api} from '../composables/useBoothApi.js';
-import {createJobPoller} from '../composables/useJobPoller.js';
-import {loadArchive} from '../stores/archive.js';
-import {foleyReel, foleySources, loadFoleySources} from '../stores/booth.js';
+import {api} from '../composables/useBoothApi';
+import {createJobPoller} from '../composables/useJobPoller';
+import {loadArchive} from '../stores/archive';
+import {foleyReel, foleySources, loadFoleySources} from '../stores/booth';
+
+interface FoleyJob {
+    state?: string;
+    seed?: number;
+    outputs?: string[];
+    exit_code?: number;
+    log_tail?: string[];
+}
+
+interface FoleyTake {
+    url: string;
+    kind: string;
+    title: string;
+    meta: {seed?: number};
+}
 
 const prompt = ref('');
 const negative = ref('music, background music, melody');
@@ -20,11 +35,11 @@ const reelOptions = computed(() => [
 const duration = ref(8);
 const seed = ref(7);
 const error = ref('');
-const logLines = ref([]);
+const logLines = ref<string[]>([]);
 const logShown = ref(false);
-const results = ref(null); // null = nothing cued yet — the empty note stands
+const results = ref<FoleyTake[] | null>(null); // null = nothing cued yet — the empty note stands
 
-function settle(job) {
+function settle(job: FoleyJob) {
     if (job.state === 'done') {
         loadArchive();
         results.value = (job.outputs || []).map(f => ({
@@ -39,7 +54,7 @@ function settle(job) {
 }
 
 const poller = createJobPoller({
-    fetchJob: () => api('/api/foley/job'),
+    fetchJob: () => api<FoleyJob>('/api/foley/job'),
     intervalMs: 3000,
     onTick: job => {
         logLines.value = job.log_tail || [];
@@ -63,7 +78,7 @@ async function cue() {
         logShown.value = true;
         poller.start();
     } catch (e) {
-        error.value = e.message || String(e);
+        error.value = (e as Error).message || String(e);
     }
 }
 
@@ -71,7 +86,7 @@ onMounted(async () => {
     loadFoleySources().catch(() => {});
     // resume watching if a score is already recording when the room opens
     try {
-        const job = await api('/api/foley/job');
+        const job = await api<FoleyJob>('/api/foley/job');
         if (job.state === 'running') {
             logShown.value = true;
             poller.start();

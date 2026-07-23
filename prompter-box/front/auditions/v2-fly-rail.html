@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audition V2 — The Working Fly Rail + the Light Board · The Prompter's Box</title>
+<!-- Fonts: the real booth reads Oswald/Courier Prime from the system with
+     Arial Narrow / Courier New fallbacks. For file:// fidelity the audition
+     pulls them from Google Fonts. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* ===== The booth palette, lifted 1:1 from uno.config.ts ===== */
+:root {
+  --booth: #17130f;
+  --drape: #241d16;
+  --drape-edge: #33291d;
+  --lamp: #e8b04a;
+  --lamp-dim: #8a6a2e;
+  --paper: #efe6d2;
+  --paper-shade: #e0d4ba;
+  --ink: #2b241b;
+  --dim: #9a8b74;
+  --cue-red: #c2543a;
+  --go-green: #7da16b;
+  --stage-off: #241c14;
+  --stage-dead: #17130f;
+  --filament: #ffd27a;
+  --plate-face: #1d1610;
+  --plate-edge: #3a2e1f;
+  --meter-well: #0d0b08;
+  --display: 'Oswald', 'Arial Narrow', 'Helvetica Neue', sans-serif;
+  --body: system-ui, 'Segoe UI', sans-serif;
+  --typed: 'Courier Prime', 'Courier New', monospace;
+  --ember: #cc6b33;
+  --ember-dim: #7a4322;
+  --cured: #7da16b;
+  --tattered: #c2543a;
+  --curing: #8a6a2e;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--booth);
+  background-image: radial-gradient(ellipse 900px 340px at 50% -80px, rgba(232,176,74,.14), transparent 70%);
+  color: var(--dim); font-family: var(--body); font-size: 15px; line-height: 1.5;
+  overflow: hidden;
+}
+body.take-running { background-image: radial-gradient(ellipse 900px 340px at 50% -80px, rgba(232,176,74,.24), transparent 70%); }
+
+/* ===== The whole surface — collapsing rail right, full-width Light Board pit bottom ===== */
+.booth {
+  --rail-w: 68px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rail-w);
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "deck rail"
+    "pit  pit";
+  height: 100vh;
+  transition: grid-template-columns .18s ease;
+}
+/* the fly rail works: hover, keyboard focus, or the pin flies it open (a gated CSS transition, never a JS loop) */
+.booth:has(.rail:hover), .booth:has(.rail:focus-within), .booth.pinned { --rail-w: 248px; }
+
+/* ---- The Working Fly Rail (right, collapsing) ---- */
+.rail {
+  grid-area: rail;
+  background: var(--drape); border-left: 1px solid var(--drape-edge);
+  overflow-y: auto; overflow-x: hidden; padding: 8px 0 16px;
+}
+.pin {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: none; border: none; color: var(--lamp-dim); cursor: pointer;
+  font: 500 10px var(--display); letter-spacing: .22em; text-transform: uppercase;
+  padding: 8px 0 8px 22px; margin-bottom: 4px;
+}
+.pin:hover { color: var(--lamp); }
+.pin:focus-visible { outline: 2px solid var(--lamp-dim); outline-offset: -2px; }
+.pin .glyph { flex: none; width: 24px; text-align: center; font-size: 13px; margin-left: -6px; }
+.pin .lbl { opacity: 0; white-space: nowrap; transition: opacity .12s ease; }
+.wing-head {
+  font: 500 10px var(--display); letter-spacing: .26em; text-transform: uppercase;
+  color: var(--lamp-dim); padding: 15px 20px 6px; white-space: nowrap; overflow: hidden;
+  opacity: 0; transition: opacity .12s ease;
+}
+.wing-head.rule { position: relative; }
+.line {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  background: none; border: none; border-left: 3px solid transparent;
+  color: var(--dim); cursor: pointer; text-align: left;
+  font: 400 13px var(--display); letter-spacing: .16em; text-transform: uppercase;
+  padding: 10px 20px 10px 19px; white-space: nowrap; overflow: hidden;
+}
+.line:hover { color: var(--paper); background: rgba(232,176,74,.04); }
+.line[aria-selected="true"] { color: var(--lamp); border-left-color: var(--lamp); background: rgba(232,176,74,.06); }
+.line:focus-visible { outline: 2px solid var(--lamp-dim); outline-offset: -2px; }
+.line .lbl { flex: 1; opacity: 0; transition: opacity .12s ease; }
+/* the nav x status fusion — the engine lines wear their live station lamp IN the rail */
+.line .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; margin-left: 6px;
+  background: var(--stage-off); box-shadow: inset 0 1px 2px rgba(0,0,0,.7); }
+.line .dot.ready   { background: var(--go-green); box-shadow: 0 0 6px rgba(125,161,107,.6); }
+.line .dot.standby { background: var(--lamp-dim); box-shadow: 0 0 5px rgba(138,106,46,.5); }
+.line .dot.live    { background: radial-gradient(circle at 40% 35%, var(--filament), var(--lamp) 70%);
+  box-shadow: 0 0 9px rgba(232,176,74,.9); animation: eye-pulse 1.4s ease-in-out infinite; }
+.line .dot.none    { width: 5px; height: 5px; margin-left: 9px; box-shadow: none; background: var(--drape-edge); }
+/* reveal labels + wing heads when the rail is flown open */
+.booth:has(.rail:hover) .lbl, .booth:has(.rail:focus-within) .lbl, .booth.pinned .lbl,
+.booth:has(.rail:hover) .wing-head, .booth:has(.rail:focus-within) .wing-head, .booth.pinned .wing-head,
+.booth:has(.rail:hover) .pin .lbl, .booth:has(.rail:focus-within) .pin .lbl, .booth.pinned .pin .lbl { opacity: 1; }
+@keyframes eye-pulse { 50% { opacity: .5; } }
+
+/* ---- The Deck ---- */
+.deck { grid-area: deck; overflow: auto; padding: 24px; }
+.deck-inner { max-width: 1440px; margin: 0 auto; }
+.room-head { font: 500 17px var(--display); letter-spacing: .18em; text-transform: uppercase; color: var(--lamp); margin-bottom: 4px; }
+.room-head span { display: block; font: 400 11px var(--display); letter-spacing: .24em; color: var(--dim); margin-top: 3px; }
+
+/* ---- Shared booth grammar ---- */
+.panel { background: var(--drape); border: 1px solid var(--drape-edge); border-radius: 3px; padding: 22px; }
+label.field { display: block; font: 400 11px var(--body); letter-spacing: .16em; text-transform: uppercase; margin: 14px 0 5px; color: var(--dim); }
+.ctl { width: 100%; background: var(--booth); border: 1px solid var(--drape-edge); border-radius: 2px; color: var(--paper); font: 14px var(--typed); padding: 9px 11px; }
+.ctl::placeholder { color: var(--lamp-dim); }
+.ctl:focus-visible { outline: 2px solid var(--lamp-dim); outline-offset: 1px; border-color: var(--lamp-dim); }
+.row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; margin-top: 4px; }
+.row > div { flex: 1; min-width: 150px; }
+.row .ctl.num { width: 96px; }
+.knob-note { font-size: 11px; color: var(--dim); margin-top: 6px; line-height: 1.4; opacity: .82; }
+.fire { background: var(--lamp); border: none; color: var(--ink); font: 600 13px var(--display); letter-spacing: .2em; text-transform: uppercase; padding: 11px 26px; cursor: pointer; border-radius: 2px; margin-top: 18px; }
+.fire:hover { filter: brightness(1.08); }
+.fire:focus-visible { outline: 2px solid var(--lamp-dim); outline-offset: 2px; }
+.fire.sm { margin-top: 0; padding: 8px 16px; font-size: 11px; }
+.note { font-size: 12px; margin-top: 14px; line-height: 1.5; }
+
+/* ---- The Curing Rack strip ---- */
+.rack-strip { margin-top: 26px; }
+.strip-head { font: 500 13px var(--display); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); margin-bottom: 12px; }
+.strip-head span { color: var(--lamp-dim); letter-spacing: .1em; font-size: 11px; }
+.rack-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.candidate { background: var(--drape); border: 1px solid var(--drape-edge); border-radius: 3px; overflow: hidden; }
+.candidate .well { position: relative; height: 140px; background: var(--meter-well); }
+.candidate .well::before { content: ""; position: absolute; inset: 0; opacity: .55; }
+.bisque-a::before { background: radial-gradient(ellipse 58% 34% at 50% 64%, var(--paper-shade), var(--lamp-dim) 46%, transparent 72%); }
+.bisque-b::before { background: radial-gradient(ellipse 18% 62% at 50% 50%, var(--paper-shade), var(--lamp-dim) 52%, transparent 74%); }
+.bisque-c::before { background: radial-gradient(ellipse 66% 26% at 50% 58%, var(--paper-shade), var(--lamp-dim) 50%, transparent 76%); }
+.qa-badge { position: absolute; top: 0; right: 0; z-index: 2; font: 11px var(--display); letter-spacing: .2em; text-transform: uppercase; color: var(--ink); padding: 4px 12px 4px 14px; clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%); }
+.qa-badge.cured { background: var(--cured); }
+.qa-badge.tattered { background: var(--tattered); color: var(--paper); }
+.qa-badge.curing { background: var(--curing); }
+.candidate .body { padding: 12px 14px 14px; }
+.candidate .title { font: 400 13px var(--typed); color: var(--paper); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
+.chip { font: 10px var(--typed); letter-spacing: .04em; color: var(--dim); border: 1px solid var(--drape-edge); border-radius: 2px; padding: 3px 7px; }
+.chip.scar { color: var(--ember); border-color: var(--ember-dim); }
+.qa-line { font-size: 11.5px; font-style: italic; color: var(--dim); margin-top: 8px; line-height: 1.45; }
+.acts { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.act { background: none; border: 1px solid var(--drape-edge); color: var(--dim); font: 11px var(--display); letter-spacing: .16em; text-transform: uppercase; padding: 7px 12px; cursor: pointer; border-radius: 2px; }
+.act:hover { border-color: var(--lamp-dim); color: var(--lamp); }
+.act.breaker:hover { border-color: var(--tattered); color: var(--tattered); }
+.act:focus-visible { outline: 2px solid var(--lamp-dim); }
+
+/* ===== The Pit — the Light Board, spanning FULL width ===== */
+.pit {
+  grid-area: pit; background: var(--drape); border-top: 1px solid var(--drape-edge);
+  display: flex; align-items: stretch; gap: 18px; padding: 12px 18px;
+}
+/* footlight bulbs: 30px, brass bezel, in a full-width run */
+.footrun { display: flex; align-items: flex-end; gap: 22px; flex: 1 1 auto; min-width: 0; overflow-x: auto; padding-bottom: 2px; }
+.bulb-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: none; }
+.bulb {
+  position: relative; width: 30px; height: 30px; border-radius: 50%;
+  background: var(--stage-off); border: 2px solid var(--lamp-dim);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,.7);
+  transition: background .42s ease, box-shadow .42s ease;
+}
+.bulb-cell.ready   .bulb { background: radial-gradient(circle at 40% 35%, var(--go-green), #4f6b41 75%); box-shadow: 0 0 10px rgba(125,161,107,.6); }
+.bulb-cell.standby .bulb { background: radial-gradient(circle at 40% 35%, var(--lamp), var(--lamp-dim) 75%); box-shadow: 0 0 8px rgba(138,106,46,.55); }
+.bulb-cell.live .bulb { background: radial-gradient(circle at 40% 35%, var(--filament), var(--lamp) 70%); border-color: var(--lamp); box-shadow: 0 0 16px rgba(232,176,74,.9); animation: bulb-pulse 1.4s ease-in-out infinite; }
+.bulb-cell.dark .bulb { background: var(--stage-dead); border-color: var(--plate-edge); box-shadow: inset 0 2px 4px rgba(0,0,0,.7); }
+@keyframes bulb-pulse { 50% { box-shadow: 0 0 6px rgba(232,176,74,.4); } }
+.bulb-cap { font: 500 10px var(--display); letter-spacing: .16em; text-transform: uppercase; color: var(--dim); white-space: nowrap; }
+.bulb-state { font: 9px var(--typed); color: var(--dim); white-space: nowrap; }
+.bulb-cell.ready .bulb-state { color: var(--go-green); }
+.bulb-cell.standby .bulb-state { color: var(--lamp); }
+.bulb-cell.live .bulb-cap, .bulb-cell.live .bulb-state { color: var(--filament); }
+/* the blackout cool — L->R along the lip, with the ember afterglow signature */
+.footrun.cooling .bulb { background: var(--stage-off) !important; border-color: var(--lamp-dim) !important; box-shadow: inset 0 2px 4px rgba(0,0,0,.7) !important; animation: none !important; }
+.footrun.cooling .bulb::after {
+  content: ""; position: absolute; inset: -4px; border-radius: 50%; pointer-events: none;
+  box-shadow: 0 0 16px 3px var(--ember); opacity: 0; animation: ember-afterglow .7s ease-out both;
+}
+.footrun.cooling .bulb-cell:nth-child(1) .bulb { transition-delay: 0s; }
+.footrun.cooling .bulb-cell:nth-child(2) .bulb, .footrun.cooling .bulb-cell:nth-child(2) .bulb::after { transition-delay: .08s; animation-delay: .08s; }
+.footrun.cooling .bulb-cell:nth-child(3) .bulb, .footrun.cooling .bulb-cell:nth-child(3) .bulb::after { transition-delay: .16s; animation-delay: .16s; }
+.footrun.cooling .bulb-cell:nth-child(4) .bulb, .footrun.cooling .bulb-cell:nth-child(4) .bulb::after { transition-delay: .24s; animation-delay: .24s; }
+.footrun.cooling .bulb-cell:nth-child(5) .bulb, .footrun.cooling .bulb-cell:nth-child(5) .bulb::after { transition-delay: .32s; animation-delay: .32s; }
+@keyframes ember-afterglow { 0% { opacity: .85; } 100% { opacity: 0; } }
+
+/* master fader as a light-board channel */
+.fader { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; flex: none; }
+.fader .channel { position: relative; width: 22px; height: 48px; background: var(--meter-well); border: 1px solid var(--plate-edge); border-radius: 3px; }
+.fader .fill { position: absolute; left: 0; right: 0; bottom: 0; height: 41%; background: linear-gradient(0deg, var(--lamp-dim), var(--lamp)); border-radius: 0 0 2px 2px; }
+.fader .handle { position: absolute; left: -4px; right: -4px; height: 6px; bottom: calc(41% - 3px); background: var(--paper-shade); border: 1px solid var(--ink); border-radius: 2px; }
+.fader .lab { font: 500 9px var(--display); letter-spacing: .18em; text-transform: uppercase; color: var(--dim); }
+.fader .read { font: 9px var(--typed); color: var(--dim); white-space: nowrap; }
+
+/* the blackout lever — the actor is implied, never drawn */
+.lever { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; flex: none;
+  background: none; border: 1px solid var(--drape-edge); color: var(--dim); cursor: pointer;
+  border-radius: 2px; padding: 6px 16px; min-width: 108px; }
+.lever .glyph { font-size: 20px; line-height: 1; }
+.lever .lever-lbl { font: 500 10px var(--display); letter-spacing: .18em; text-transform: uppercase; white-space: nowrap; }
+.lever:hover { border-color: var(--cue-red); color: var(--cue-red); }
+.lever:focus-visible { outline: 2px solid var(--lamp-dim); }
+
+/* the Marquee cartouche — front-stage-right, at the rail-pit corner */
+.cartouche { display: flex; flex-direction: column; justify-content: center; flex: none;
+  border-left: 1px solid var(--drape-edge); padding: 4px 6px 4px 18px; min-width: 168px; }
+.cartouche h1 { font: 500 15px var(--display); letter-spacing: .18em; text-transform: uppercase; color: var(--lamp); }
+.cartouche small { font: 9px var(--typed); letter-spacing: .1em; color: var(--dim); margin-top: 2px; }
+
+/* ===== Responsive ===== */
+@media (max-width: 1280px) {
+  .cartouche { min-width: 132px; }
+  .footrun { gap: 16px; }
+}
+@media (max-width: 1000px) {
+  /* the docked case — the fly rail earns its keep, staying collapsed until called */
+  .pit { flex-wrap: wrap; gap: 12px; }
+  .footrun { flex: 1 1 100%; order: 1; }
+  .fader { order: 2; }
+  .lever { order: 3; }
+  .cartouche { order: 4; border-left: none; padding-left: 0; min-width: 0; }
+}
+
+/* ===== The reduced-motion floor ===== */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+</style>
+</head>
+<body class="take-running">
+<div class="booth" id="booth">
+
+  <nav class="rail" role="tablist" aria-label="The Working Fly Rail — hover or pin to open; engine lines wear their live lamp">
+    <button class="pin" id="pin" aria-pressed="false" title="Pin the fly rail open"><span class="glyph">⇥</span><span class="lbl">Pin the rail</span></button>
+    <div class="wing" role="group" aria-label="Performance">
+      <div class="wing-head">Performance</div>
+      <button class="line" role="tab" aria-selected="false" data-line="forge" title="Forge"><span class="lbl">Forge</span><span class="dot ready"></span></button>
+      <button class="line" role="tab" aria-selected="false" data-line="face" title="Face Shop"><span class="lbl">Face Shop</span><span class="dot standby"></span></button>
+      <button class="line" role="tab" aria-selected="false" data-line="stage" title="The Stage — LIVE"><span class="lbl">The Stage</span><span class="dot live"></span></button>
+      <button class="line" role="tab" aria-selected="false" data-line="foley" title="Foley Booth"><span class="lbl">Foley Booth</span><span class="dot"></span></button>
+    </div>
+    <div class="wing" role="group" aria-label="The Kiln Wing">
+      <div class="wing-head">The Kiln Wing</div>
+      <button class="line" role="tab" aria-selected="true" data-line="kiln" title="The Kiln"><span class="lbl">The Kiln</span><span class="dot ready"></span></button>
+      <button class="line" role="tab" aria-selected="false" data-line="rack" title="The Curing Rack"><span class="lbl">The Curing Rack</span><span class="dot none"></span></button>
+      <button class="line" role="tab" aria-selected="false" data-line="shelf" title="The Prop Shelf"><span class="lbl">The Prop Shelf</span><span class="dot none"></span></button>
+      <button class="line" role="tab" aria-selected="false" data-line="nightshift" title="The Night Shift"><span class="lbl">The Night Shift</span><span class="dot none"></span></button>
+    </div>
+    <div class="wing" role="group" aria-label="The Vault">
+      <div class="wing-head">The Vault</div>
+      <button class="line" role="tab" aria-selected="false" data-line="archive" title="The Canisters"><span class="lbl">The Canisters</span><span class="dot none"></span></button>
+    </div>
+    <div class="wing" role="group" aria-label="Understage">
+      <div class="wing-head">Understage</div>
+      <button class="line" role="tab" aria-selected="false" data-line="house-stage" title="Stage UI"><span class="lbl">Stage UI</span><span class="dot none"></span></button>
+      <button class="line" role="tab" aria-selected="false" data-line="house-face" title="Face Shop UI"><span class="lbl">Face Shop UI</span><span class="dot none"></span></button>
+    </div>
+  </nav>
+
+  <main class="deck">
+    <div class="deck-inner">
+      <section class="panel">
+        <h2 class="room-head">The Kiln <span>firing a prop from a subject phrase</span></h2>
+        <label class="field" for="subject">What are we firing?</label>
+        <input class="ctl" id="subject" type="text" value="a black omafiets leaning at a slight angle">
+        <div class="row">
+          <div>
+            <label class="field" for="octree">Octree</label>
+            <input class="ctl num" id="octree" type="number" value="128">
+            <p class="knob-note">The carving grid — higher keeps thin spokes from shredding, fires slower, weighs more. A firing that tatters at 128 auto-refires at 224.</p>
+          </div>
+          <div>
+            <label class="field" for="threshold">Threshold</label>
+            <input class="ctl num" id="threshold" type="number" value="0.5" step="0.05">
+            <p class="knob-note">Where the skin gets drawn in the voxel field. Lower is more generous — thin features survive as material; higher cuts tighter and can eat them.</p>
+          </div>
+          <div>
+            <label class="field" for="seed">Seed</label>
+            <input class="ctl num" id="seed" type="number" placeholder="the kiln picks">
+            <p class="knob-note">The dice — one seed steers both the painting and the mesh, so the same subject fires the same prop again. Leave it blank and the kiln rolls fresh.</p>
+          </div>
+        </div>
+        <button class="fire">Fire it</button>
+        <p class="note">The kiln fires the subject on a palette-disjoint chroma ground, keys it clean (border alpha lands at exactly 0 or the firing is refused), meshes it through Hunyuan3D, and checks the silhouette before you see it.</p>
+      </section>
+
+      <section class="rack-strip" aria-label="The Curing Rack">
+        <h3 class="strip-head">The Curing Rack <span>· three firings pending your thumb</span></h3>
+        <div class="rack-grid">
+          <article class="candidate">
+            <div class="well bisque-a"><span class="qa-badge cured">Cured</span></div>
+            <div class="body">
+              <p class="title">omafiets — fired at 224 · refire 1</p>
+              <div class="chips"><span class="chip">leaning left</span><span class="chip scar">refired · 224</span><span class="chip">seed 80412</span></div>
+              <p class="qa-line">the silhouette tattered — the refire at 224 closed it.</p>
+              <div class="acts"><button class="fire sm">Approve</button><button class="act">Refire</button><button class="act breaker">Discard</button></div>
+            </div>
+          </article>
+          <article class="candidate">
+            <div class="well bisque-b"><span class="qa-badge curing">Curing…</span></div>
+            <div class="body">
+              <p class="title">lantaarnpaal — fired at 128</p>
+              <div class="chips"><span class="chip">upright</span><span class="chip">octree 128</span><span class="chip">seed 19771</span></div>
+              <p class="qa-line">the mesher is still counting the silhouette — hold your thumb.</p>
+              <div class="acts"><button class="fire sm">Approve</button><button class="act">Refire</button><button class="act breaker">Discard</button></div>
+            </div>
+          </article>
+          <article class="candidate">
+            <div class="well bisque-c"><span class="qa-badge tattered">Tattered</span></div>
+            <div class="body">
+              <p class="title">kerkbank — fired at 128</p>
+              <div class="chips"><span class="chip">front-facing</span><span class="chip scar">refired · 224</span><span class="chip">seed 55090</span><span class="chip">two-sided</span></div>
+              <p class="qa-line">still tattering after refire — needs a look.</p>
+              <div class="acts"><button class="fire sm">Approve</button><button class="act">Refire</button><button class="act breaker">Discard</button></div>
+            </div>
+          </article>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div class="pit" role="status" aria-label="The Light Board — footlights, master fader, blackout lever">
+    <div class="footrun" id="footrun">
+      <div class="bulb-cell ready" data-station="forge"><div class="bulb"></div><span class="bulb-cap">Forge</span><span class="bulb-state">ready</span></div>
+      <div class="bulb-cell standby" data-station="face"><div class="bulb"></div><span class="bulb-cap">Face Shop</span><span class="bulb-state">warm</span></div>
+      <div class="bulb-cell live" data-station="stage"><div class="bulb"></div><span class="bulb-cap">Stage</span><span class="bulb-state">LIVE</span></div>
+      <div class="bulb-cell dark" data-station="foley"><div class="bulb"></div><span class="bulb-cap">Foley</span><span class="bulb-state">dark</span></div>
+      <div class="bulb-cell ready" data-station="kiln"><div class="bulb"></div><span class="bulb-cap">Kiln</span><span class="bulb-state">ready</span></div>
+    </div>
+    <div class="fader" aria-label="Stage load 41 percent, 9.4 of 16 gigabytes free">
+      <span class="lab">Stage 41%</span>
+      <div class="channel"><i class="fill"></i><i class="handle"></i></div>
+      <span class="read">9.4 / 16 GB</span>
+    </div>
+    <button class="lever" id="lever" title="Throw the blackout — unload every LLM from the GPU">
+      <span class="glyph" aria-hidden="true">⎇</span>
+      <span class="lever-lbl" id="leverLbl">Blackout</span>
+    </button>
+    <div class="cartouche">
+      <h1>The Prompter's Box</h1>
+      <small>the booth that feeds the lines</small>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  var booth = document.getElementById('booth');
+  var rail = booth.querySelector('.rail');
+  var lines = Array.prototype.slice.call(rail.querySelectorAll('.line'));
+
+  // The Pin Rail — click a line to fly a room onto the deck.
+  rail.addEventListener('click', function (e) {
+    var line = e.target.closest('.line');
+    if (!line) return;
+    lines.forEach(function (l) { l.setAttribute('aria-selected', l === line ? 'true' : 'false'); });
+  });
+
+  // The pin — the fly rail latches open (persisted, like the real localStorage flag).
+  var pin = document.getElementById('pin');
+  var PIN_KEY = 'promptbox.audition.railPinned';
+  function applyPin(on) {
+    booth.classList.toggle('pinned', on);
+    pin.setAttribute('aria-pressed', on ? 'true' : 'false');
+    pin.querySelector('.glyph').textContent = on ? '⇤' : '⇥';
+    pin.querySelector('.lbl').textContent = on ? 'Unpin the rail' : 'Pin the rail';
+    pin.title = on ? 'Let the fly rail collapse again' : 'Pin the fly rail open';
+  }
+  try { applyPin(localStorage.getItem(PIN_KEY) === '1'); } catch (e) { applyPin(false); }
+  pin.addEventListener('click', function () {
+    var on = !booth.classList.contains('pinned');
+    applyPin(on);
+    try { localStorage.setItem(PIN_KEY, on ? '1' : '0'); } catch (e) {}
+  });
+
+  // The blackout lever — L->R cool with the ember afterglow, then relight (mirrors Callboard timing).
+  var footrun = document.getElementById('footrun');
+  var lever = document.getElementById('lever');
+  var leverLbl = document.getElementById('leverLbl');
+  var busy = false;
+  lever.addEventListener('click', function () {
+    if (busy) return;
+    busy = true;
+    footrun.classList.add('cooling');
+    document.body.classList.remove('take-running');
+    leverLbl.textContent = '3 voices left';
+    setTimeout(function () {
+      footrun.classList.remove('cooling');
+      document.body.classList.add('take-running');
+    }, 1200);
+    setTimeout(function () {
+      leverLbl.textContent = 'Blackout';
+      busy = false;
+    }, 2600);
+  });
+})();
+</script>
+</body>
+</html>

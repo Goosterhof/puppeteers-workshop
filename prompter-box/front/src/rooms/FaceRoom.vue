@@ -1,15 +1,39 @@
-<script setup>
+<script setup lang="ts">
 import {NumberInput, SingleSelect, Textarea} from '@script-development/ui-inputs';
 import {computed, onMounted, onUnmounted, ref} from 'vue';
 import StampedMount from '../components/StampedMount.vue';
 import ThumbRow from '../components/ThumbRow.vue';
-import {api} from '../composables/useBoothApi.js';
-import {createJobPoller} from '../composables/useJobPoller.js';
-import {loadArchive} from '../stores/archive.js';
-import {castAsLead, facePrompt, faceSitter, leadRes, openTab} from '../stores/booth.js';
-import {nearestResolution} from '../lib/resolution.js';
+import {api} from '../composables/useBoothApi';
+import {createJobPoller} from '../composables/useJobPoller';
+import type {JobPoller} from '../composables/useJobPoller';
+import {loadArchive} from '../stores/archive';
+import {castAsLead, facePrompt, faceSitter, leadRes, openTab} from '../stores/booth';
 
-const painters = ref([]);
+interface BrushFault {
+    node_type?: string;
+    exception_message?: string;
+}
+
+interface FaceJob {
+    state?: string;
+    images?: string[];
+    detail?: (BrushFault | [string, BrushFault])[];
+}
+
+interface PaintingCue {
+    prompt: string;
+    seed: number;
+    model: string;
+}
+
+interface Painting {
+    url: string;
+    title: string;
+    meta: {model: string; seed: number};
+    acts: {label: string; run: (ctx: {el: HTMLElement | null}) => Promise<void>}[];
+}
+
+const painters = ref<string[]>([]);
 const painter = ref('');
 const painterOptions = computed(() => painters.value.map(name => ({id: name, label: name})));
 const width = ref(768);
@@ -18,16 +42,16 @@ const seed = ref(7);
 const busy = ref(false);
 const painting = ref(false);
 const error = ref('');
-const results = ref(null);
+const results = ref<Painting[] | null>(null);
 
 // In edit mode the output follows the sitter's dimensions (~1 MP).
-const pickSitter = name => {
+const pickSitter = (name: string) => {
     faceSitter.value = faceSitter.value === name ? null : name;
 };
 
 async function loadPainters() {
     try {
-        const {painters: list, default: def} = await api('/api/face/models');
+        const {painters: list, default: def} = await api<{painters: string[]; default?: string}>('/api/face/models');
         painters.value = list;
         if (def) painter.value = def;
     } catch {
@@ -36,16 +60,16 @@ async function loadPainters() {
 }
 onMounted(loadPainters);
 
-let poller = null;
+let poller: JobPoller | null = null;
 onUnmounted(() => poller?.stop());
 
 // ComfyUI's history reports [event, {node_type, exception_message, …}] pairs.
-const brokenBrush = detail => (detail || [])
-    .map(m => (Array.isArray(m) ? m[1] : m) || {})
+const brokenBrush = (detail?: FaceJob['detail']) => (detail || [])
+    .map((m): BrushFault => (Array.isArray(m) ? m[1] : m) || {})
     .map(d => (d.exception_message ? `${d.node_type ? `${d.node_type}: ` : ''}${d.exception_message}` : ''))
     .filter(Boolean).join('\n');
 
-function showPaintings(files, cue) {
+function showPaintings(files: string[], cue: PaintingCue) {
     results.value = files.map(f => ({
         url: `/face-output/${encodeURIComponent(f)}`,
         title: cue.prompt || f,
@@ -66,7 +90,7 @@ async function cue() {
     const cued = {prompt: facePrompt.value.trim(), seed: Number(seed.value),
         model: (painter.value || '').replace(/\.(gguf|safetensors)$/i, '')};
     try {
-        const {prompt_id} = await api('/api/face/generate', {
+        const {prompt_id} = await api<{prompt_id: string}>('/api/face/generate', {
             prompt: facePrompt.value, width: Number(width.value), height: Number(height.value), seed: Number(seed.value),
             model: painter.value || undefined, source: faceSitter.value || undefined,
         });
@@ -76,7 +100,7 @@ async function cue() {
         poller = createJobPoller({
             // the Face Shop speaks 'painting' where the stage says 'running'
             fetchJob: async () => {
-                const r = await api(`/api/face/result/${prompt_id}`);
+                const r = await api<FaceJob>(`/api/face/result/${prompt_id}`);
                 return {...r, state: r.state === 'painting' ? 'running' : r.state};
             },
             intervalMs: 1500,
@@ -84,7 +108,7 @@ async function cue() {
                 busy.value = false;
                 painting.value = false;
                 if (r.state === 'done') {
-                    showPaintings(r.images, cued);
+                    showPaintings(r.images!, cued);
                     loadArchive();
                 } else {
                     const detail = brokenBrush(r.detail);
@@ -96,13 +120,13 @@ async function cue() {
             onLost: e => {
                 busy.value = false;
                 painting.value = false;
-                error.value = `The booth lost sight of the Face Shop — ${e?.message || 'the server stopped answering'}. Reload to reconnect; the painting may still land in The Canisters.`;
+                error.value = `The booth lost sight of the Face Shop — ${(e as {message?: string} | null)?.message || 'the server stopped answering'}. Reload to reconnect; the painting may still land in The Canisters.`;
             },
         });
         poller.start();
     } catch (e) {
         busy.value = false;
-        error.value = e.message || String(e);
+        error.value = (e as Error).message || String(e);
     }
 }
 </script>

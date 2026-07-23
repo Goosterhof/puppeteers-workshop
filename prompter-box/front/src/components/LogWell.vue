@@ -1,15 +1,18 @@
-<script setup>
+<script setup lang="ts">
 import {nextTick, ref, watch} from 'vue';
 
 // The log well — the tail of a running job, pinned to the newest line.
 // One definition for what the single-file front styled four times over
 // (#stage-log, #kiln-log, #foley-log, #shift-log — identical declarations).
-const props = defineProps({
-    lines: {type: Array, default: () => []},
-    shown: {type: Boolean, default: false},
+const props = withDefaults(defineProps<{
+    lines?: string[];
+    shown?: boolean;
+}>(), {
+    lines: () => [],
+    shown: false,
 });
 
-const well = ref(null);
+const well = ref<HTMLElement | null>(null);
 watch(() => props.lines, async () => {
     await nextTick();
     if (well.value) well.value.scrollTop = well.value.scrollHeight;

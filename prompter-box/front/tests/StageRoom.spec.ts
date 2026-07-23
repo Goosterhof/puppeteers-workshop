@@ -1,13 +1,13 @@
 import {mount} from '@vue/test-utils';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import StageRoom from '../src/rooms/StageRoom.vue';
-import {leadRes, pickedImage, stagePrompt} from '../src/stores/booth.js';
+import {leadRes, pickedImage, stagePrompt} from '../src/stores/booth';
 
 // The Stage's contract (#00063 Phase 3): the playbill drives the form, the
 // wardrobe rides the payload, and every refusal voices the old front's words.
 
-const {apiMock} = vi.hoisted(() => ({apiMock: vi.fn()}));
-vi.mock('../src/composables/useBoothApi.js', () => ({api: apiMock}));
+const {apiMock} = vi.hoisted(() => ({apiMock: vi.fn<(path: string, body?: unknown) => Promise<unknown>>()}));
+vi.mock('../src/composables/useBoothApi', () => ({api: apiMock}));
 
 const MODELS = {
     models: [
@@ -21,8 +21,8 @@ const MODELS = {
     default: 'i2v_14b',
 };
 
-const routes = overrides => path => {
-    const table = {
+const routes = (overrides: Record<string, unknown> = {}) => (path: string): Promise<unknown> => {
+    const table: Record<string, unknown> = {
         '/api/stage/models': MODELS,
         '/api/stage/job': {state: 'idle'},
         '/api/stage/generate': {ok: true},
@@ -42,10 +42,10 @@ const boot = async () => {
 
 // the selects are ui-inputs SingleSelects now — a pick is open-then-commit
 // through the listbox, the way a hand would do it
-const pick = async (wrapper, id, optionLabel) => {
+const pick = async (wrapper: Awaited<ReturnType<typeof boot>>, id: string, optionLabel: string) => {
     await wrapper.find(`#${id}`).trigger('click');
     const option = wrapper.findAll('.ui-select__option').find(o => o.text() === optionLabel);
-    await option.trigger('click');
+    await option!.trigger('click');
     await vi.advanceTimersByTimeAsync(0);
 };
 
@@ -66,7 +66,7 @@ describe('StageRoom', () => {
         const wrapper = await boot();
         expect(wrapper.find('#stage-model').text()).toContain('Wan 2.2 i2v 14B');
         expect(wrapper.find('#stage-res').text()).toContain('704x1280');
-        expect(wrapper.find('#stage-steps').element.value).toBe('4');
+        expect(wrapper.find<HTMLInputElement>('#stage-steps').element.value).toBe('4');
         expect(wrapper.findAll('.garment')).toHaveLength(2);
         expect(wrapper.find('#stage-note').text()).toBe('the house recipe');
         wrapper.unmount();
@@ -92,8 +92,8 @@ describe('StageRoom', () => {
         const wrapper = await boot();
         pickedImage.value = 'crier.png';
         stagePrompt.value = 'the bell swings';
-        await wrapper.findAll('.garment button')[0].trigger('click');
-        await wrapper.findAll('.garment input')[0].setValue('0.8');
+        await wrapper.findAll('.garment button')[0]!.trigger('click');
+        await wrapper.findAll('.garment input')[0]!.setValue('0.8');
         await wrapper.find('#stage-go').trigger('click');
         await vi.advanceTimersByTimeAsync(0);
 

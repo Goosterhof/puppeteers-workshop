@@ -11,7 +11,17 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const loader = new GLTFLoader();
 
-export function mountWheel(container, glbUrl, { initialYaw = 0, reducedMotion = false } = {}) {
+export interface WheelOptions {
+  initialYaw?: number;
+  reducedMotion?: boolean;
+}
+
+export interface WheelMount {
+  ready: Promise<void>;
+  dispose(): void;
+}
+
+export function mountWheel(container: HTMLElement, glbUrl: string, { initialYaw = 0, reducedMotion = false }: WheelOptions = {}): WheelMount {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
   renderer.domElement.classList.add('wheel-canvas');
@@ -33,7 +43,7 @@ export function mountWheel(container, glbUrl, { initialYaw = 0, reducedMotion = 
   controls.minZoom = 0.5;
   controls.maxZoom = 6;
 
-  let mag = 1, raf = null, lastActive = 0, dragging = false, disposed = false;
+  let mag = 1, raf: number | null = null, lastActive = 0, dragging = false, disposed = false;
   const render = () => {
     const reach = camera.position.distanceTo(controls.target) || 1;
     camRight.setFromMatrixColumn(camera.matrixWorld, 0);
@@ -66,19 +76,21 @@ export function mountWheel(container, glbUrl, { initialYaw = 0, reducedMotion = 
   const ro = new ResizeObserver(size);
   ro.observe(container);
 
-  const ready = new Promise((resolve, reject) => {
+  const ready = new Promise<void>((resolve, reject) => {
     loader.load(glbUrl, (gltf) => {
       if (disposed) return resolve();  // the card re-dealt while the piece was loading
       // the kiln's GLBs carry POSITION only — no normals, no materials. Without
       // this pass three lights nothing (zero normals) and glTF's default
       // material is full-metal white: the piece renders as a flat gray ghost.
       gltf.scene.traverse((o) => {
-        if (!o.isMesh) return;
-        if (!o.geometry.getAttribute('normal')) o.geometry.computeVertexNormals();
-        const m = o.material;
-        if (m?.isMeshStandardMaterial) {
-          m.metalness = 0; m.roughness = 0.88;
-          if (!m.map && m.color.getHex() === 0xffffff) m.color.setHex(0xb9b4ac);  // bisque, like the strip
+        if (!(o as THREE.Mesh).isMesh) return;
+        const mesh = o as THREE.Mesh;
+        if (!mesh.geometry.getAttribute('normal')) mesh.geometry.computeVertexNormals();
+        const m = mesh.material as THREE.Material;
+        if ((m as THREE.MeshStandardMaterial)?.isMeshStandardMaterial) {
+          const std = m as THREE.MeshStandardMaterial;
+          std.metalness = 0; std.roughness = 0.88;
+          if (!std.map && std.color.getHex() === 0xffffff) std.color.setHex(0xb9b4ac);  // bisque, like the strip
         }
       });
       scene.add(gltf.scene);
@@ -108,12 +120,13 @@ export function mountWheel(container, glbUrl, { initialYaw = 0, reducedMotion = 
       ro.disconnect();
       controls.dispose();
       scene.traverse((o) => {
-        o.geometry?.dispose?.();
-        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        const mesh = o as Partial<THREE.Mesh>;
+        mesh.geometry?.dispose();
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         mats.forEach((m) => {
           if (!m) return;
-          Object.values(m).forEach((v) => v?.isTexture && v.dispose());
-          m.dispose?.();
+          Object.values(m).forEach((v) => (v as THREE.Texture)?.isTexture && (v as THREE.Texture).dispose());
+          m.dispose();
         });
       });
       renderer.dispose();

@@ -3,7 +3,33 @@
 // Input is the /api/status payload; output is one of the five lamp states per
 // station: dark | ready | standby | held | live.
 
-export function stationState(s) {
+export interface LoadedModel {
+    model: string;
+    size_gb: number;
+}
+
+// The /api/status payload — the callboard's whole vocabulary, typed once.
+export interface StatusPayload {
+    forge: {up: boolean; loaded: LoadedModel[]};
+    face_shop: {up: boolean; vram_free_gb: number; vram_total_gb: number};
+    stage_job: {state: string; model?: string};
+    stage_ui: {up: boolean};
+    foley: {installed: boolean; job_state?: string};
+    kiln?: {job_state?: string; subject?: string};
+    night_shift?: {row_id?: number | string; subject?: string};
+}
+
+export type LampState = 'dark' | 'ready' | 'standby' | 'held' | 'live';
+export type StationName = 'forge' | 'face' | 'stage' | 'foley' | 'kiln';
+export type StationStates = Record<StationName, LampState>;
+export type StationReads = Record<StationName, string>;
+
+export interface StageLoad {
+    pct: number;
+    read: string;
+}
+
+export function stationState(s: StatusPayload): StationStates {
     return {
         forge: !s.forge.up ? 'dark' : s.forge.loaded.length ? 'standby' : 'ready',
         face: s.face_shop.up ? 'standby' : 'dark',
@@ -18,7 +44,7 @@ export function stationState(s) {
     };
 }
 
-export function stationReads(s, st) {
+export function stationReads(s: StatusPayload, st: StationStates): StationReads {
     return {
         forge: st.forge === 'standby'
             ? s.forge.loaded.map(m => `${m.model} ${m.size_gb} GB`).join(' · ') : '',
@@ -33,7 +59,7 @@ export function stationReads(s, st) {
 
 // The dimmer: the only VRAM truth the poll carries is the Face Shop's —
 // no invented numbers when it is dark.
-export function stageLoad(s) {
+export function stageLoad(s: StatusPayload): StageLoad {
     if (!s.face_shop.up) return {pct: 0, read: '— no meter · Face Shop dark'};
     const {vram_free_gb: free, vram_total_gb: total} = s.face_shop;
     return {

@@ -1,9 +1,9 @@
-<script setup>
+<script setup lang="ts">
 import {ref, watch} from 'vue';
 
 // The full ComfyUI house — same lazy first-entry activation as the Stage UI.
-const props = defineProps({active: {type: Boolean, default: false}});
-const src = ref(null);
+const props = withDefaults(defineProps<{active?: boolean}>(), {active: false});
+const src = ref<string | undefined>(undefined);
 watch(() => props.active, a => {
     if (a && !src.value) src.value = 'http://localhost:8188';
 }, {immediate: true});

@@ -1,0 +1,36 @@
+{
+    "compilerOptions": {
+        "target": "ESNext",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "lib": ["ESNext", "DOM", "DOM.Iterable"],
+        "types": ["vite/client", "unocss"],
+        "jsx": "preserve",
+        "useDefineForClassFields": true,
+
+        "strict": true,
+        "noImplicitReturns": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "noFallthroughCasesInSwitch": true,
+        "noUncheckedIndexedAccess": true,
+        "noUncheckedSideEffectImports": true,
+        "useUnknownInCatchVariables": true,
+        "allowUnreachableCode": false,
+        "allowUnusedLabels": false,
+
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "isolatedModules": true,
+        "verbatimModuleSyntax": true,
+        "resolveJsonModule": true,
+        "allowImportingTsExtensions": true,
+
+        "skipLibCheck": true,
+        "noEmit": true,
+
+        "paths": {"@/*": ["./src/*"]}
+    },
+    "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.vue", "tests/**/*.ts", "uno.config.ts"],
+    "references": [{"path": "./tsconfig.node.json"}]
+}

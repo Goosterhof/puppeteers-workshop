@@ -1,26 +1,37 @@
-<script setup>
+<script setup lang="ts">
 import {nextTick, ref, watch} from 'vue';
 import PottersWheel from '../components/PottersWheel.vue';
-import {api} from '../composables/useBoothApi.js';
+import {api} from '../composables/useBoothApi';
 
-const props = defineProps({active: {type: Boolean, default: false}});
+interface ShelfProp {
+    name: string;
+    glb: string;
+    hide?: string;
+    glb_mb: number;
+    octree?: number;
+    seed?: number | null;
+    two_sided?: boolean;
+    subject?: string;
+}
 
-const shelf = ref([]);
-const spotName = ref(null);
+const props = withDefaults(defineProps<{active?: boolean}>(), {active: false});
+
+const shelf = ref<ShelfProp[]>([]);
+const spotName = ref<string | null>(null);
 const error = ref('');
-const view = ref(null);
+const view = ref<HTMLElement | null>(null);
 
 async function loadShelf() {
     error.value = '';
     try {
-        shelf.value = (await api('/api/shelf/list')).props || [];
+        shelf.value = (await api<{props?: ShelfProp[]}>('/api/shelf/list')).props || [];
         if (spotName.value && !shelf.value.some(p => p.name === spotName.value)) spotName.value = null;
     } catch (e) {
-        error.value = e.message || String(e);
+        error.value = (e as Error).message || String(e);
     }
 }
 
-async function spotlight(name) {
+async function spotlight(name: string) {
     spotName.value = name === spotName.value ? null : name;
     if (spotName.value) {
         await nextTick();
@@ -29,7 +40,7 @@ async function spotlight(name) {
     }
 }
 
-const chips = prop => {
+const chips = (prop: ShelfProp): string[] => {
     const rows = [`${prop.glb_mb} MB`];
     if (prop.octree) rows.push(`octree ${prop.octree}`);
     if (prop.seed !== null && prop.seed !== undefined) rows.push(`seed ${prop.seed}`);

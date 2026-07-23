@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audition V1 — The Pin Rail, straight · The Prompter's Box</title>
+<!-- Fonts: the real booth reads Oswald/Courier Prime from the system with
+     Arial Narrow / Courier New fallbacks (no web-font link in index.html).
+     For file:// fidelity the audition pulls them from Google Fonts. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* ===== The booth palette, lifted 1:1 from uno.config.ts ===== */
+:root {
+  --booth: #17130f;
+  --drape: #241d16;
+  --drape-edge: #33291d;
+  --lamp: #e8b04a;
+  --lamp-dim: #8a6a2e;
+  --paper: #efe6d2;
+  --paper-shade: #e0d4ba;
+  --ink: #2b241b;
+  --dim: #9a8b74;
+  --cue-red: #c2543a;
+  --go-green: #7da16b;
+  --stage-off: #241c14;
+  --stage-dead: #17130f;
+  --filament: #ffd27a;
+  --plate-face: #1d1610;
+  --plate-edge: #3a2e1f;
+  --meter-well: #0d0b08;
+  --display: 'Oswald', 'Arial Narrow', 'Helvetica Neue', sans-serif;
+  --body: system-ui, 'Segoe UI', sans-serif;
+  --typed: 'Courier Prime', 'Courier New', monospace;
+  --ember: #cc6b33;
+  --ember-dim: #7a4322;
+  --cured: #7da16b;
+  --tattered: #c2543a;
+  --curing: #8a6a2e;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--booth);
+  background-image: radial-gradient(ellipse 900px 340px at 50% -80px, rgba(232,176,74,.14), transparent 70%);
+  color: var(--dim);
+  font-family: var(--body);
+  font-size: 15px;
+  line-height: 1.5;
+  overflow: hidden;               /* the booth is a docked pane, not a scrolling page */
+}
+body.take-running { background-image: radial-gradient(ellipse 900px 340px at 50% -80px, rgba(232,176,74,.24), transparent 70%); }
+
+/* ===== The whole surface — Deck left, Pin Rail right (full height), Pit bottom over the deck only ===== */
+.booth {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "marquee rail"
+    "deck    rail"
+    "pit     rail";
+  height: 100vh;
+}
+
+/* ---- The Marquee (top-left) ---- */
+.marquee {
+  grid-area: marquee;
+  display: flex; align-items: baseline; gap: 16px;
+  padding: 22px 24px 14px; border-bottom: 1px solid var(--drape-edge);
+}
+.marquee h1 {
+  font-family: var(--display); font-weight: 500;
+  font-size: 24px; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--lamp);
+}
+.marquee small { font-size: 11px; letter-spacing: .3em; color: var(--dim); }
+
+/* ---- The Pin Rail (right wing, full height) ---- */
+.rail {
+  grid-area: rail;
+  background: var(--drape); border-left: 1px solid var(--drape-edge);
+  overflow-y: auto; padding: 14px 0 20px;
+}
+.wing { padding: 0; }
+.wing-head {
+  font: 500 10px var(--display); letter-spacing: .26em; text-transform: uppercase;
+  color: var(--lamp-dim); padding: 16px 20px 7px; white-space: nowrap;
+}
+.line {
+  display: flex; align-items: center; gap: 11px; width: 100%;
+  background: none; border: none; border-left: 3px solid transparent;
+  color: var(--dim); cursor: pointer; text-align: left;
+  font: 400 13px var(--display); letter-spacing: .16em; text-transform: uppercase;
+  padding: 9px 20px 9px 17px;
+}
+.line:hover { color: var(--paper); background: rgba(232,176,74,.04); }
+.line[aria-selected="true"] { color: var(--lamp); border-left-color: var(--lamp); background: rgba(232,176,74,.06); }
+.line:focus-visible { outline: 2px solid var(--lamp-dim); outline-offset: -2px; }
+.line .lbl { flex: 1; }
+/* the rail dot: a quiet cue that a line hangs an engine room (V1 keeps it small) */
+.line .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--stage-off); flex: none; box-shadow: inset 0 1px 2px rgba(0,0,0,.7); }
+.line .dot.ready   { background: var(--go-green); box-shadow: 0 0 5px rgba(125,161,107,.6); }
+.line .dot.standby { background: var(--lamp-dim); box-shadow: 0 0 4px rgba(138,106,46,.5); }
+.line .dot.live    { background: radial-gradient(circle at 40% 35%, var(--filament), var(--lamp) 70%); box-shadow: 0 0 7px rgba(232,176,74,.9); }
+
+/* ---- The Deck (left/center) ---- */
+.deck { grid-area: deck; overflow: auto; padding: 24px; }
+.deck-inner { max-width: 1400px; margin: 0 auto; }
+.deck-inner.settling { animation: flyin .15s cubic-bezier(.22,.61,.36,1) both; }
+@keyframes flyin { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+
+.room-head {
+  font: 500 17px var(--display); letter-spacing: .18em; text-transform: uppercase; color: var(--lamp);
+  margin-bottom: 4px;
+}
+.room-head span { display: block; font: 400 11px var(--display); letter-spacing: .24em; color: var(--dim); margin-top: 3px; }
+
+/* ---- Shared booth grammar (panels, fields, fire) ---- */
+.panel { background: var(--drape); border: 1px solid var(--drape-edge); border-radius: 3px; padding: 22px; }
+label.field { display: block; font: 400 11px var(--body); letter-spacing: .16em; text-transform: uppercase; margin: 14px 0 5px; color: var(--dim); }
+.ctl {
+  width: 100%; background: var(--booth); border: 1px solid var(--drape-edge); border-radius: 2px;
+  color: var(--paper); font: 14px var(--typed); padding: 9px 11px;
+}
+.ctl::placeholder { color: var(--lamp-dim); }
+.ctl:focus-visible { outline: 2px solid var(--lamp-dim); outline-offset: 1px; border-color: var(--lamp-dim); }
+.row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; margin-top: 4px; }
+.row > div { flex: 1; min-width: 150px; }
+.row .ctl.num { width: 96px; }
+.knob-note { font-size: 11px; color: var(--dim); margin-top: 6px; line-height: 1.4; opacity: .82; }
+.fire {
+  background: var(--lamp); border: none; color: var(--ink);
+  font: 600 13px var(--display); letter-spacing: .2em; text-transform: uppercase;
+  padding: 11px 26px; cursor: pointer; border-radius: 2px; margin-top: 18px;
+}
+.fire:hover { filter: brightness(1.08); }
+.fire:focus-visible { outline: 2px solid var(--lamp-dim); outline-offset: 2px; }
+.fire.sm { margin-top: 0; padding: 8px 16px; font-size: 11px; }
+.note { font-size: 12px; margin-top: 14px; line-height: 1.5; }
+
+/* ---- The Curing Rack strip ---- */
+.rack-strip { margin-top: 26px; }
+.strip-head { font: 500 13px var(--display); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); margin-bottom: 12px; }
+.strip-head span { color: var(--lamp-dim); letter-spacing: .1em; font-size: 11px; }
+.rack-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.candidate { background: var(--drape); border: 1px solid var(--drape-edge); border-radius: 3px; overflow: hidden; }
+.candidate .well { position: relative; height: 140px; background: var(--meter-well); }
+.candidate .well::before {
+  content: ""; position: absolute; inset: 0; opacity: .55;
+}
+.bisque-a::before { background: radial-gradient(ellipse 58% 34% at 50% 64%, var(--paper-shade), var(--lamp-dim) 46%, transparent 72%); }
+.bisque-b::before { background: radial-gradient(ellipse 18% 62% at 50% 50%, var(--paper-shade), var(--lamp-dim) 52%, transparent 74%); }
+.bisque-c::before { background: radial-gradient(ellipse 66% 26% at 50% 58%, var(--paper-shade), var(--lamp-dim) 50%, transparent 76%); }
+.qa-badge {
+  position: absolute; top: 0; right: 0; z-index: 2;
+  font: 11px var(--display); letter-spacing: .2em; text-transform: uppercase; color: var(--ink);
+  padding: 4px 12px 4px 14px; clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%);
+}
+.qa-badge.cured    { background: var(--cured); }
+.qa-badge.tattered { background: var(--tattered); color: var(--paper); }
+.qa-badge.curing   { background: var(--curing); }
+.candidate .body { padding: 12px 14px 14px; }
+.candidate .title { font: 400 13px var(--typed); color: var(--paper); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
+.chip { font: 10px var(--typed); letter-spacing: .04em; color: var(--dim); border: 1px solid var(--drape-edge); border-radius: 2px; padding: 3px 7px; }
+.chip.scar { color: var(--ember); border-color: var(--ember-dim); }
+.qa-line { font-size: 11.5px; font-style: italic; color: var(--dim); margin-top: 8px; line-height: 1.45; }
+.acts { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.act { background: none; border: 1px solid var(--drape-edge); color: var(--dim); font: 11px var(--display); letter-spacing: .16em; text-transform: uppercase; padding: 7px 12px; cursor: pointer; border-radius: 2px; }
+.act:hover { border-color: var(--lamp-dim); color: var(--lamp); }
+.act.breaker:hover { border-color: var(--tattered); color: var(--tattered); }
+.act:focus-visible, .line:focus-visible { outline: 2px solid var(--lamp-dim); }
+
+/* ===== The Pit (bottom) — the Callboard relocated WHOLE, spanning the deck only ===== */
+.pit {
+  grid-area: pit;
+  background: var(--drape); border-top: 1px solid var(--drape-edge);
+  display: flex; align-items: stretch; gap: 12px; padding: 14px 20px;
+}
+.footlights { display: flex; gap: 12px; flex: 1 1 auto; min-width: 0; }
+.station {
+  flex: 1 1 150px; min-width: 140px; display: grid;
+  grid-template-columns: auto 1fr; gap: 2px 10px; align-items: center;
+  background: var(--plate-face); border: 1px solid var(--plate-edge); border-radius: 3px; padding: 10px 14px;
+}
+.station .eye {
+  grid-row: 1 / 5; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--stage-off); box-shadow: inset 0 1px 3px rgba(0,0,0,.7);
+  transition: background .42s ease, box-shadow .42s ease;
+}
+.station .pos { font: 500 13px var(--display); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); grid-column: 2; }
+.station .cue { font-size: 10px; letter-spacing: .1em; color: var(--dim); grid-column: 2; }
+.station .state { font: 11px var(--display); letter-spacing: .18em; text-transform: uppercase; grid-column: 2; color: var(--dim); }
+.station .read { font: 10px var(--typed); color: var(--dim); grid-column: 2; opacity: .8; min-height: 1em; }
+.station.ready   .eye { background: var(--go-green); box-shadow: 0 0 8px rgba(125,161,107,.6); }
+.station.ready   .state { color: var(--go-green); }
+.station.standby .eye { background: var(--lamp-dim); box-shadow: 0 0 6px rgba(138,106,46,.5); }
+.station.standby .state { color: var(--lamp); }
+.station.held    .eye { background: var(--cue-red); box-shadow: 0 0 8px rgba(194,84,58,.6); }
+.station.held    .state { color: var(--cue-red); }
+.station.live { background: #241a10; border-color: var(--lamp-dim); box-shadow: 0 0 22px rgba(232,176,74,.22); }
+.station.live .eye {
+  background: radial-gradient(circle at 40% 35%, var(--filament), var(--lamp) 70%);
+  box-shadow: 0 0 14px rgba(232,176,74,.9); animation: eye-pulse 1.4s ease-in-out infinite;
+}
+.station.live .state { color: var(--filament); font-weight: 600; }
+@keyframes eye-pulse { 50% { opacity: .5; } }
+/* the blackout — lamps cool L->R like killing the work lights */
+.footlights.blackout .station .eye { background: var(--stage-off) !important; box-shadow: inset 0 1px 3px rgba(0,0,0,.7) !important; animation: none !important; }
+.footlights.blackout .station:nth-child(2) .eye { transition-delay: .08s; }
+.footlights.blackout .station:nth-child(3) .eye { transition-delay: .16s; }
+.footlights.blackout .station:nth-child(4) .eye { transition-delay: .24s; }
+.footlights.blackout .station:nth-child(5) .eye { transition-delay: .32s; }
+.footlights.blackout .station.live { background: var(--plate-face); border-color: var(--plate-edge); box-shadow: none; }
+
+.dimmer { flex: 0 0 180px; display: flex; flex-direction: column; justify-content: center; gap: 5px; }
+.dimmer .occ-label { font: 10px var(--display); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); }
+.dimmer .track { height: 8px; background: var(--meter-well); border-radius: 4px; overflow: hidden; }
+.dimmer .track i { display: block; height: 100%; width: 41%; background: linear-gradient(90deg, var(--lamp-dim), var(--lamp)); }
+.dimmer .occ-read { font: 11px var(--typed); color: var(--dim); }
+.evict {
+  align-self: center; background: none; border: 1px solid var(--drape-edge); color: var(--dim);
+  font: 11px var(--display); letter-spacing: .18em; text-transform: uppercase; padding: 8px 14px; cursor: pointer; border-radius: 2px;
+}
+.evict:hover { border-color: var(--lamp-dim); color: var(--lamp); }
+.evict:focus-visible { outline: 2px solid var(--lamp-dim); }
+
+/* ===== Responsive — honest at 1920 / 1280 / ~1000 ===== */
+/* <=1280 (and the ~1000 right-docked case): rail 188px, the Pit wraps cleanly */
+@media (max-width: 1280px) {
+  .booth { grid-template-columns: minmax(0, 1fr) 188px; }
+  .pit { flex-wrap: wrap; }
+  .footlights { flex: 1 1 100%; flex-wrap: wrap; }
+  .dimmer { flex: 1 1 200px; }
+  .evict { align-self: stretch; }
+}
+/* <=900: rail collapses to a 44px lamp-spine; footlights scroll, dimmer drops below */
+@media (max-width: 900px) {
+  .booth { grid-template-columns: minmax(0, 1fr) 44px; }
+  .wing-head { font-size: 0; padding: 10px 0 4px; }
+  .wing-head::before { content: "·"; font-size: 16px; display: block; text-align: center; color: var(--lamp-dim); }
+  .line { justify-content: center; padding: 10px 0; border-left-width: 3px; }
+  .line .lbl { display: none; }
+  .line .dot { width: 9px; height: 9px; }
+  .pit { flex-wrap: wrap; }
+  .footlights { flex: 1 1 100%; flex-wrap: nowrap; overflow-x: auto; }
+  .footlights .station { flex: 0 0 150px; }
+  .dimmer { flex: 1 1 200px; }
+}
+
+/* ===== The reduced-motion floor ===== */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+</style>
+</head>
+<body class="take-running">
+<div class="booth">
+
+  <div class="marquee">
+    <h1>The Prompter's Box</h1>
+    <small>the booth that feeds the lines</small>
+  </div>
+
+  <nav class="rail" role="tablist" aria-label="The Pin Rail — pull a line to fly a room onto the deck">
+    <div class="wing" role="group" aria-label="Performance">
+      <div class="wing-head">Performance</div>
+      <button class="line" role="tab" aria-selected="false" data-line="forge"><span class="dot ready"></span><span class="lbl">Forge</span></button>
+      <button class="line" role="tab" aria-selected="false" data-line="face"><span class="dot standby"></span><span class="lbl">Face Shop</span></button>
+      <button class="line" role="tab" aria-selected="false" data-line="stage"><span class="dot live"></span><span class="lbl">The Stage</span></button>
+      <button class="line" role="tab" aria-selected="false" data-line="foley"><span class="dot"></span><span class="lbl">Foley Booth</span></button>
+    </div>
+    <div class="wing" role="group" aria-label="The Kiln Wing">
+      <div class="wing-head">The Kiln Wing</div>
+      <button class="line" role="tab" aria-selected="true" data-line="kiln"><span class="dot ready"></span><span class="lbl">The Kiln</span></button>
+      <button class="line" role="tab" aria-selected="false" data-line="rack"><span class="dot"></span><span class="lbl">The Curing Rack</span></button>
+      <button class="line" role="tab" aria-selected="false" data-line="shelf"><span class="dot"></span><span class="lbl">The Prop Shelf</span></button>
+      <button class="line" role="tab" aria-selected="false" data-line="nightshift"><span class="dot"></span><span class="lbl">The Night Shift</span></button>
+    </div>
+    <div class="wing" role="group" aria-label="The Vault">
+      <div class="wing-head">The Vault</div>
+      <button class="line" role="tab" aria-selected="false" data-line="archive"><span class="dot"></span><span class="lbl">The Canisters</span></button>
+    </div>
+    <div class="wing" role="group" aria-label="Understage">
+      <div class="wing-head">Understage</div>
+      <button class="line" role="tab" aria-selected="false" data-line="house-stage"><span class="dot"></span><span class="lbl">Stage UI</span></button>
+      <button class="line" role="tab" aria-selected="false" data-line="house-face"><span class="dot"></span><span class="lbl">Face Shop UI</span></button>
+    </div>
+  </nav>
+
+  <main class="deck">
+    <div class="deck-inner" id="deckInner">
+      <section class="panel">
+        <h2 class="room-head">The Kiln <span>firing a prop from a subject phrase</span></h2>
+        <label class="field" for="subject">What are we firing?</label>
+        <input class="ctl" id="subject" type="text" value="a black omafiets leaning at a slight angle">
+        <div class="row">
+          <div>
+            <label class="field" for="octree">Octree</label>
+            <input class="ctl num" id="octree" type="number" value="128">
+            <p class="knob-note">The carving grid — higher keeps thin spokes from shredding, fires slower, weighs more. A firing that tatters at 128 auto-refires at 224.</p>
+          </div>
+          <div>
+            <label class="field" for="threshold">Threshold</label>
+            <input class="ctl num" id="threshold" type="number" value="0.5" step="0.05">
+            <p class="knob-note">Where the skin gets drawn in the voxel field. Lower is more generous — thin features survive as material; higher cuts tighter and can eat them.</p>
+          </div>
+          <div>
+            <label class="field" for="seed">Seed</label>
+            <input class="ctl num" id="seed" type="number" placeholder="the kiln picks">
+            <p class="knob-note">The dice — one seed steers both the painting and the mesh, so the same subject fires the same prop again. Leave it blank and the kiln rolls fresh.</p>
+          </div>
+        </div>
+        <button class="fire">Fire it</button>
+        <p class="note">The kiln fires the subject on a palette-disjoint chroma ground, keys it clean (border alpha lands at exactly 0 or the firing is refused), meshes it through Hunyuan3D, and checks the silhouette before you see it.</p>
+      </section>
+
+      <section class="rack-strip" aria-label="The Curing Rack">
+        <h3 class="strip-head">The Curing Rack <span>· three firings pending your thumb</span></h3>
+        <div class="rack-grid">
+          <article class="candidate">
+            <div class="well bisque-a"><span class="qa-badge cured">Cured</span></div>
+            <div class="body">
+              <p class="title">omafiets — fired at 224 · refire 1</p>
+              <div class="chips"><span class="chip">leaning left</span><span class="chip scar">refired · 224</span><span class="chip">seed 80412</span></div>
+              <p class="qa-line">the silhouette tattered — the refire at 224 closed it.</p>
+              <div class="acts"><button class="fire sm">Approve</button><button class="act">Refire</button><button class="act breaker">Discard</button></div>
+            </div>
+          </article>
+          <article class="candidate">
+            <div class="well bisque-b"><span class="qa-badge curing">Curing…</span></div>
+            <div class="body">
+              <p class="title">lantaarnpaal — fired at 128</p>
+              <div class="chips"><span class="chip">upright</span><span class="chip">octree 128</span><span class="chip">seed 19771</span></div>
+              <p class="qa-line">the mesher is still counting the silhouette — hold your thumb.</p>
+              <div class="acts"><button class="fire sm">Approve</button><button class="act">Refire</button><button class="act breaker">Discard</button></div>
+            </div>
+          </article>
+          <article class="candidate">
+            <div class="well bisque-c"><span class="qa-badge tattered">Tattered</span></div>
+            <div class="body">
+              <p class="title">kerkbank — fired at 128</p>
+              <div class="chips"><span class="chip">front-facing</span><span class="chip scar">refired · 224</span><span class="chip">seed 55090</span><span class="chip">two-sided</span></div>
+              <p class="qa-line">still tattering after refire — needs a look.</p>
+              <div class="acts"><button class="fire sm">Approve</button><button class="act">Refire</button><button class="act breaker">Discard</button></div>
+            </div>
+          </article>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div class="pit" role="status" aria-label="The Pit — the footlights, the dimmer board, the blackout lever">
+    <div class="footlights" id="footlights">
+      <div class="station ready" data-station="forge">
+        <i class="eye"></i><b class="pos">Forge</b><span class="cue">Promptsmith · Ollama</span><span class="state">ready</span><span class="read"></span>
+      </div>
+      <div class="station standby" data-station="face">
+        <i class="eye"></i><b class="pos">Face Shop</b><span class="cue">ComfyUI</span><span class="state">warm</span><span class="read">SDXL resident</span>
+      </div>
+      <div class="station live" data-station="stage">
+        <i class="eye"></i><b class="pos">Stage</b><span class="cue">Wan2GP</span><span class="state">LIVE</span><span class="read">i2v 14B · mid-take</span>
+      </div>
+      <div class="station dark" data-station="foley">
+        <i class="eye"></i><b class="pos">Foley</b><span class="cue">MMAudio</span><span class="state">dark</span><span class="read"></span>
+      </div>
+      <div class="station ready" data-station="kiln">
+        <i class="eye"></i><b class="pos">Kiln</b><span class="cue">Hunyuan3D · Klein</span><span class="state">ready</span><span class="read"></span>
+      </div>
+    </div>
+    <div class="dimmer">
+      <span class="occ-label">Stage load</span>
+      <div class="track"><i></i></div>
+      <span class="occ-read">9.4 / 16 GB free</span>
+    </div>
+    <button class="evict" id="evict" title="Unload every LLM from the GPU">Clear the boards</button>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  // The Pin Rail — click a line, it flies a room onto the deck (aria-selected + a gated fly-in settle).
+  var rail = document.querySelector('.rail');
+  var lines = Array.prototype.slice.call(rail.querySelectorAll('.line'));
+  var deckInner = document.getElementById('deckInner');
+  rail.addEventListener('click', function (e) {
+    var line = e.target.closest('.line');
+    if (!line) return;
+    lines.forEach(function (l) { l.setAttribute('aria-selected', l === line ? 'true' : 'false'); });
+    // Signature: the fly-in settle on tab switch (<=160ms, gated by reduced-motion clamp)
+    deckInner.classList.remove('settling');
+    void deckInner.offsetWidth;       // reflow so the animation re-arms
+    deckInner.classList.add('settling');
+  });
+
+  // The blackout lever — cool the footlights L->R, swap the label, relight after ~1.2s (mirrors Callboard).
+  var footlights = document.getElementById('footlights');
+  var evict = document.getElementById('evict');
+  var busy = false;
+  evict.addEventListener('click', function () {
+    if (busy) return;
+    busy = true;
+    footlights.classList.add('blackout');
+    document.body.classList.remove('take-running');
+    evict.textContent = '3 voices left the boards';
+    setTimeout(function () {
+      footlights.classList.remove('blackout');
+      document.body.classList.add('take-running');
+    }, 1200);
+    setTimeout(function () {
+      evict.textContent = 'Clear the boards';
+      busy = false;
+    }, 2600);
+  });
+})();
+</script>
+</body>
+</html>

@@ -8,19 +8,19 @@ import ShelfRoom from '../src/rooms/ShelfRoom.vue';
 // The Rack surface is covered in RackRoom.spec; these are the other two.
 
 const {apiMock, wheelHandles, mountWheelMock} = vi.hoisted(() => {
-    const handles = [];
+    const handles: Array<{ready: Promise<void>; dispose: ReturnType<typeof vi.fn<() => void>>}> = [];
     return {
-        apiMock: vi.fn(),
+        apiMock: vi.fn<(path: string, body?: unknown) => Promise<unknown>>(),
         wheelHandles: handles,
-        mountWheelMock: vi.fn(() => {
-            const handle = {ready: Promise.resolve(), dispose: vi.fn()};
+        mountWheelMock: vi.fn<(container: HTMLElement, glbUrl: string, opts?: {initialYaw?: number; reducedMotion?: boolean}) => {ready: Promise<void>; dispose: () => void}>((_container, _glbUrl) => {
+            const handle = {ready: Promise.resolve(), dispose: vi.fn<() => void>()};
             handles.push(handle);
             return handle;
         }),
     };
 });
-vi.mock('../src/composables/useBoothApi.js', () => ({api: apiMock}));
-vi.mock('../src/lib/potters-wheel.js', () => ({mountWheel: mountWheelMock}));
+vi.mock('../src/composables/useBoothApi', () => ({api: apiMock}));
+vi.mock('../src/lib/potters-wheel', () => ({mountWheel: mountWheelMock}));
 
 describe('the wheel on the kiln bench', () => {
     beforeEach(() => {
@@ -34,10 +34,10 @@ describe('the wheel on the kiln bench', () => {
     });
 
     it('a done firing mounts the wheel; a re-fire re-deals it; unmount disposes', async () => {
-        apiMock.mockImplementation(path => Promise.resolve({
+        apiMock.mockImplementation((path: string) => Promise.resolve(({
             '/api/kiln/job': {state: 'idle'},
             '/api/kiln/generate': {ok: true},
-        }[path]));
+        } as Record<string, unknown>)[path]));
         const wrapper = mount(KilnRoom);
         await vi.advanceTimersByTimeAsync(0);
 
@@ -45,19 +45,19 @@ describe('the wheel on the kiln bench', () => {
         await wrapper.find('#kiln-go').trigger('click');
         await vi.advanceTimersByTimeAsync(0);
 
-        apiMock.mockImplementation(path => Promise.resolve({
+        apiMock.mockImplementation((path: string) => Promise.resolve(({
             '/api/kiln/job': {state: 'done', candidate: {id: 'k1', subject: 'a black omafiets',
                 seed: 7, octree: 128, orient_hint: 'front-facing', refire_count: 0, two_sided: false}},
-        }[path]));
+        } as Record<string, unknown>)[path]));
         await vi.advanceTimersByTimeAsync(3000);
         await vi.advanceTimersByTimeAsync(0);
 
         expect(mountWheelMock).toHaveBeenCalledTimes(1);
-        expect(mountWheelMock.mock.calls[0][1]).toBe('/kiln-output/k1/k1.glb');
+        expect(mountWheelMock.mock.calls[0]![1]).toBe('/kiln-output/k1/k1.glb');
         expect(wrapper.find('.mount-stamp').text()).toBe('Fired');
 
         wrapper.unmount();
-        expect(wheelHandles[0].dispose).toHaveBeenCalledTimes(1);
+        expect(wheelHandles[0]!.dispose).toHaveBeenCalledTimes(1);
     });
 
     it('the three knob-notes stand verbatim in the settings drawer', async () => {
@@ -96,12 +96,12 @@ describe('the wheel on the shelf', () => {
         await wrapper.find('#shelf-grid .well.shelf').trigger('click');
         await vi.advanceTimersByTimeAsync(0);
         expect(mountWheelMock).toHaveBeenCalledTimes(1);
-        expect(mountWheelMock.mock.calls[0][1]).toBe('/pack-queue/omafiets/omafiets.glb');
+        expect(mountWheelMock.mock.calls[0]![1]).toBe('/pack-queue/omafiets/omafiets.glb');
         expect(wrapper.find('#shelf-view .candidate.spotlight').exists()).toBe(true);
 
         await wrapper.find('#shelf-view .acts .act').trigger('click');
         await vi.advanceTimersByTimeAsync(0);
-        expect(wheelHandles[0].dispose).toHaveBeenCalledTimes(1);
+        expect(wheelHandles[0]!.dispose).toHaveBeenCalledTimes(1);
         expect(wrapper.find('#shelf-view .candidate').exists()).toBe(false);
         wrapper.unmount();
     });

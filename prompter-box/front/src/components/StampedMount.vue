@@ -1,25 +1,44 @@
-<script setup>
+<script lang="ts">
+// The context an act's run() receives — restamp the button, read the mount.
+export interface MountActContext {
+    relabel: (label: string) => void;
+    el: HTMLElement | null;
+}
+
+// One act row under the print — exported so the rooms can type their acts.
+export interface MountAct {
+    label: string;
+    run: (ctx: MountActContext) => unknown;
+}
+</script>
+
+<script setup lang="ts">
 import {computed, reactive, ref} from 'vue';
-import {canisterChips} from '../lib/canisters.js';
+import type {CanisterMeta, RoomName, ShelfItem} from '../lib/canisters';
+import {canisterChips} from '../lib/canisters';
 
 // The stamped mount ("The Print") — a fresh take framed like a developed
 // print, any room, any kind. Acts are [{label, run}]; run receives
 // {relabel, el} so an act can restamp its own button ("Cast — it is in the
 // footage now") or read the mounted media, like the old handlers did.
-const props = defineProps({
-    room: {type: String, required: true},
-    url: {type: String, required: true},
-    kind: {type: String, required: true},
-    title: {type: String, required: true},
-    meta: {type: Object, default: () => ({})},
-    stamp: {type: String, default: 'Fresh'},
-    acts: {type: Array, default: () => []},
+const props = withDefaults(defineProps<{
+    room: RoomName;
+    url: string;
+    kind: string;
+    title: string;
+    meta?: CanisterMeta;
+    stamp?: string;
+    acts?: MountAct[];
+}>(), {
+    meta: () => ({}),
+    stamp: 'Fresh',
+    acts: () => [],
 });
 
-const fig = ref(null);
-const chips = computed(() => canisterChips({room: props.room, meta: props.meta}, {fresh: true}));
+const fig = ref<HTMLElement | null>(null);
+const chips = computed(() => canisterChips({room: props.room, meta: props.meta} as ShelfItem, {fresh: true}));
 const actRows = reactive(props.acts.map(a => ({...a})));
-const runAct = act => act.run({
+const runAct = (act: MountAct) => act.run({
     relabel: label => {
         act.label = label;
     },

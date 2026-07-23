@@ -1,4 +1,4 @@
-import {mount} from '@vue/test-utils';
+import {mount, type VueWrapper} from '@vue/test-utils';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
 // The Foley Booth's two job paths (#00063 Phase 2 acceptance): a bare cue is
@@ -6,13 +6,13 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 // as a Print.
 
 import FoleyRoom from '../src/rooms/FoleyRoom.vue';
-import {foleyReel} from '../src/stores/booth.js';
+import {foleyReel} from '../src/stores/booth';
 
-const {apiMock} = vi.hoisted(() => ({apiMock: vi.fn()}));
-vi.mock('../src/composables/useBoothApi.js', () => ({api: apiMock}));
+const {apiMock} = vi.hoisted(() => ({apiMock: vi.fn<(path: string, body?: unknown) => Promise<unknown>>()}));
+vi.mock('../src/composables/useBoothApi', () => ({api: apiMock}));
 
-const routes = overrides => path => {
-    const table = {
+const routes = (overrides: Record<string, unknown> = {}) => (path: string): Promise<unknown> => {
+    const table: Record<string, unknown> = {
         '/api/foley/sources': {footage: ['clip.mp4'], stage: ['take-seed7.webm']},
         '/api/foley/job': {state: 'idle'},
         '/api/foley/generate': {ok: true},
@@ -22,7 +22,7 @@ const routes = overrides => path => {
     return path in table ? Promise.resolve(table[path]) : Promise.reject(new Error(`no window: ${path}`));
 };
 
-const fire = async wrapper => {
+const fire = async (wrapper: VueWrapper) => {
     await wrapper.find('#foley-go').trigger('click');
     await vi.advanceTimersByTimeAsync(0);
 };
@@ -60,7 +60,7 @@ describe('FoleyRoom', () => {
         await vi.advanceTimersByTimeAsync(0);
         // the reel shelf is a ui-inputs SingleSelect — open, then commit
         await wrapper.find('#foley-video').trigger('click');
-        await wrapper.findAll('.ui-select__option').find(o => o.text() === 'stage · take-seed7.webm').trigger('click');
+        await wrapper.findAll('.ui-select__option').find(o => o.text() === 'stage · take-seed7.webm')!.trigger('click');
         await wrapper.find('#foley-prompt').setValue('the bell scores itself');
         await fire(wrapper);
 
@@ -85,9 +85,9 @@ describe('FoleyRoom', () => {
 
         const mounts = wrapper.findAll('.mount');
         expect(mounts).toHaveLength(2);
-        expect(mounts[0].find('audio').exists()).toBe(true);
-        expect(mounts[1].find('video').exists()).toBe(true);
-        expect(mounts[1].text()).toContain('the composite: sound on the frames');
+        expect(mounts[0]!.find('audio').exists()).toBe(true);
+        expect(mounts[1]!.find('video').exists()).toBe(true);
+        expect(mounts[1]!.text()).toContain('the composite: sound on the frames');
         wrapper.unmount();
     });
 
