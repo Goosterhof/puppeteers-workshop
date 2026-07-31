@@ -1,0 +1,91 @@
+# ============================================================================
+# THE SENTINEL — Puppeteer's Workshop Containment Protocols (repo-local)
+# ============================================================================
+# Runs on every push to main and every PR against main in THIS repo — the
+# gadget gates its own changes, mirroring the Mezzanine and the Horadric Cube.
+# Armed 2026-07-31 (Librarian audit #00003: the Workshop was the one PUBLIC
+# lab repo with no CI at all — the Vital Signs claimed otherwise for a month).
+#
+# The repo is the blueprint; the runnable bench with its ~123 GB of untracked
+# machines lives elsewhere. The Sentinel therefore guards exactly what the
+# blueprint carries — the two documented containment gate sets, nothing more:
+#
+#   * proscenium — the front (Vue 3 + strict TS) in prompter-box/front/:
+#                  lint, typecheck, vitest, and check:dist (a stale committed
+#                  static/ bundle fails the drift guard — the bench pulls,
+#                  never builds)
+#   * kiln-room  — the Kiln Room's fixture-driven pytest suite: the checks
+#                  consume frames from a pure-software rasterizer and never
+#                  need a GPU. pyrender is deliberately NOT installed here —
+#                  turntable.py lazy-imports it only on the real EGL render
+#                  path, which the containment suite never touches.
+#
+# No job fires the machines. A green Sentinel means the blueprint is sound,
+# not that the bench can perform — that remains the live-fire gate's job.
+# ============================================================================
+
+name: Sentinel — Puppeteer's Workshop
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  proscenium:
+    name: Front — Lint + Typecheck + Test + Bundle Drift
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: prompter-box/front
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: prompter-box/front/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npx vitest run
+
+      - name: Bundle drift guard
+        run: npm run check:dist
+
+  kiln-room:
+    name: Kiln Room — Fixture-Driven Pytest (no GPU)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          # Mirrors the bench venv (Python 3.12.3 on 2026-07-31)
+          python-version: '3.12'
+
+      - name: Install containment dependencies
+        # numpy/Pillow/scipy are substrate the bench venv already carries, so
+        # requirements.txt omits them; CI must name them. pyrender is skipped —
+        # see the header.
+        run: pip install numpy pillow scipy trimesh pytest
+
+      - name: Test
+        run: python -m pytest prompter-box/tests/
