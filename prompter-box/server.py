@@ -51,6 +51,22 @@ MM_OUT = MM_DIR / "output" / "prompter"
 FF_SHARED = BASE / "ffmpeg-shared" / "lib"  # torchcodec's substrate — see the runbook
 
 PORT = 7900
+HOUSE_HOST = "127.0.0.1"  # the booth is a house instrument, not a broadcast
+
+# The stage door. Two checks, both about the browser tab nobody opened on
+# purpose. The bind above already keeps the LAN out; these keep the OTHER
+# TABS out, which the bind cannot:
+#   * Origin is browser-set and unforgeable by page script. It is absent on
+#     same-origin GETs and on every non-browser caller (curl, the side-port
+#     verify probes), so an absent Origin is the house itself. A PRESENT
+#     Origin that is not this booth's own is another site knocking.
+#   * Content-Type decides whether a cross-site POST needs the browser's
+#     permission first. A POST of text/plain carrying JSON is a CORS *simple
+#     request* — no preflight, no consent — and the attacker never needs to
+#     read the reply, because the damage IS the side effect: a firing, a
+#     discard, a subprocess. Demanding application/json forces a preflight
+#     the booth answers with silence.
+CUE_SHEET_TYPE = "application/json"
 
 sys.path.insert(0, str(BASE / "prompt-forge"))
 from promptsmith import DEFAULT_MODEL, FORGE_PROFILES, VISION_MODEL, forge  # noqa: E402
@@ -524,6 +540,37 @@ class BoothWindow(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         return json.loads(self.rfile.read(length) or b"{}")
 
+    # -- the stage door -------------------------------------------------
+    def foreign_knock(self):
+        """The Origin the caller knocked from, or None when it is the house.
+
+        Matched against this request's own Host rather than a hardcoded
+        :7900 — the side-port verify booth lives on :7901 and is every bit
+        as much the house as the investor's console is.
+        """
+        origin = (self.headers.get("Origin") or "").strip().lower()
+        if not origin:
+            return None  # no browser, or a same-origin GET — the house itself
+        host = (self.headers.get("Host") or "").strip().lower()
+        if host and origin in (f"http://{host}", f"https://{host}"):
+            return None
+        return origin
+
+    def door_refusal(self, posting):
+        """One voiced refusal for every way a caller fails the stage door."""
+        if (knock := self.foreign_knock()):
+            return (f"That cue was shouted in from {knock} — the booth only takes lines "
+                    "from its own console. Open the Prompter's Box on this port and cue "
+                    "from there.", 403)
+        if not posting:
+            return None
+        marked = (self.headers.get("Content-Type") or "").partition(";")[0].strip().lower()
+        if marked != CUE_SHEET_TYPE:
+            return (f"The booth takes cue sheets marked {CUE_SHEET_TYPE} — this one arrived "
+                    f"{f'marked {marked}' if marked else 'unmarked'}. Send the cue with a JSON "
+                    "content type and the window opens.", 415)
+        return None
+
     def send_file(self, root, rel):
         target = (root / rel).resolve()
         if not target.is_relative_to(root.resolve()) or not target.is_file():
@@ -538,6 +585,8 @@ class BoothWindow(BaseHTTPRequestHandler):
 
     # -- routes --------------------------------------------------------
     def do_GET(self):
+        if (refusal := self.door_refusal(posting=False)):
+            return self.fail(*refusal)
         path, _, query = self.path.partition("?")
         path = urllib.parse.unquote(path)
         if path in ("/", "/index.html"):
@@ -588,6 +637,8 @@ class BoothWindow(BaseHTTPRequestHandler):
         self.fail("The booth has no such window.", 404)
 
     def do_POST(self):
+        if (refusal := self.door_refusal(posting=True)):
+            return self.fail(*refusal)
         try:
             payload = self.body_json()
         except json.JSONDecodeError:
@@ -1235,4 +1286,8 @@ if __name__ == "__main__":
         ok, msg = start_night_shift()
         print(f"A Night Shift row was mid-firing when the booth went dark — {msg.lower()}"
               if ok else f"Night Shift resume refused: {msg}")
-    ThreadingHTTPServer(("0.0.0.0", PORT), BoothWindow).serve_forever()
+    # Loopback only. The booth spawns subprocesses and streams footage/ —
+    # "personal media (the puppeteer's own face among it). Never leaves the
+    # building." A bind to 0.0.0.0 handed that archive to the Windows host
+    # and to whatever the firewall's inbound posture allows behind it.
+    ThreadingHTTPServer((HOUSE_HOST, PORT), BoothWindow).serve_forever()

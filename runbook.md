@@ -314,6 +314,61 @@ python (Wan2GP, ComfyUI, and MMAudio all carry all three), e.g.
 static ffmpeg in `~/.local/bin` for decode/encode (no torchcodec, so the
 shared-libs substrate is not needed here).
 
+## Containment — the Sentinel and the merge path (armed 2026-07-31)
+
+`.github/workflows/sentinel.yml` runs on every push to `main` and every PR
+against it. Two jobs, and neither fires the machines:
+
+- **proscenium** — `prompter-box/front/`: `npm ci`, `npm run lint`,
+  `npm run typecheck`, `npx vitest run`, `npm run check:dist`.
+- **kiln-room** — `pip install numpy pillow scipy trimesh pytest`, then
+  `python -m pytest prompter-box/tests/`. Fixture-driven, no GPU; pyrender is
+  deliberately not installed (`turntable.py` lazy-imports it only on the real
+  EGL path, which the suite never takes).
+
+The same gates run locally with the commands in the sections above — the
+pytest one wants the ComfyUI venv python. This is a PUBLIC repo, so it is
+outside the Sentinel quota freeze: the runs really happen and their red is
+real.
+
+`main` is **branch-protected** — a direct push is refused with GH006. Land a
+change as: fetch, branch off the `origin/main` tip, run the gates, push the
+branch, `gh pr create --head <branch>`. The investor's squash-merge is the
+authorization, and because a squash mints a NEW SHA, the lab's submodule
+gitlink is re-pointed in the parent repo AFTER the merge (`sync(workshop): …`).
+The parent's `git status` reads clean while that gitlink is stale, so the
+re-point has to be deliberate.
+
+## The stage door — the booth is a house instrument (2026-07-31)
+
+`server.py` binds **`127.0.0.1`**, not `0.0.0.0`. The booth spawns
+subprocesses and streams `footage/` — "personal media (the puppeteer's own
+face among it). Never leaves the building." The old bind handed that archive
+to the Windows host and to whatever the firewall's inbound posture allowed
+behind it.
+
+Browse it as **`http://localhost:7900`** from either side: WSL2's localhost
+forwarding reaches the loopback bind. The VM's LAN address no longer answers,
+by design. `verify-sideport.py` already bound `127.0.0.1:7901` and is
+unaffected.
+
+Two more checks stand at the door, both about the browser tab nobody opened on
+purpose — the bind cannot keep those out:
+
+- **Origin** — a request whose `Origin` is present and is not this booth's own
+  (matched against the request's own `Host`, so :7901 is as much the house as
+  :7900) is refused **403**. Absent `Origin` means the house itself: curl, the
+  verify probes, and same-origin GETs all arrive bare.
+- **Content-Type** — a POST not marked `application/json` is refused **415**.
+  A POST of `text/plain` carrying JSON is a CORS *simple request*: no
+  preflight, no consent, and the attacker never needs to read the reply
+  because the damage is the side effect — a firing, a discard, a subprocess.
+  Demanding JSON forces a preflight the booth answers with silence.
+
+The front sends the header from `useBoothApi.ts`; any new caller must too, or
+every cue 415s. `prompter-box/tests/test_server.py` holds all three behaviours
+plus the traversal guards and the 409s.
+
 ## Hard-won constraints
 
 - **Resolution discipline** — motion transfer degrades if driving video and generation

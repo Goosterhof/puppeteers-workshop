@@ -38,6 +38,49 @@ bump the lab's ref (submodule discipline).
 | **The Keymaster** | `prompter-box/keymaster.py` | Topology-aware background keying for illustrated takes — only border-connected regions (or `--min-island` pockets) are keyed, so a scroll face can never be eaten the way plain colorkey ate the TC-0057 wax seals; outputs multiply-ready VP9 WebM. The one instrument excused from the stdlib rule (numpy + Pillow + scipy — run it with a machine venv's python; see the runbook) |
 | **The Kiln Room** | `prompter-box/kiln.py` + `turntable.py` + `night_shift.py` + `stagehands.py` | The prop-firing spine (experiment log #00062): a subject phrase becomes a keyed, despilled, +6px-cropped hide and a Hunyuan3D GLB in one chain, with the Turntable's silhouette/voxel/island checks catching shredded thin structures and auto-refiring once at 224/0.4; every firing parks `pending` on the **Curing Rack** (nothing reaches `pack-queue/` without a thumb on Approve) and the **Night Shift** works a persisted call sheet overnight through the SAME `clear_the_set` guard (`stagehands.py` — the guard family extracted from server.py, one definition for every station). qwen3-vl grounds each firing and writes its Canister label. Turntable renders headless via pyrender+EGL; the shared guard rule stands unweakened. Containment: `python -m pytest prompter-box/tests/` (fixture-driven, no GPU; run with the ComfyUI venv python — see `prompter-box/requirements.txt`). Bench graft landed 2026-07-19 and the live end-to-end gate is witnessed: the omafiets shredded at 128, auto-refired to a QA-passing 224/0.4 mesh, cleared the real `pack-props.mjs` round-trip, and a 3-row Night Shift (one K=2) parked 4 labeled candidates unattended. Verify server changes live via `verify-sideport.py` on :7901 — never the investor's :7900 booth. Every candidate mounts on the **Potter's Wheel** (`front/src/lib/potters-wheel.ts`, wrapped by `PottersWheel.vue`) — a live drag-to-orbit GLB viewer, lit by a camera-riding over-the-shoulder key so no angle is ever dark: the firing bench mounts fresh pieces directly; on the Rack a click spotlights ONE candidate in an enlarged Canisters-style card above the grid (only the piece on the wheel turns — the shelf keeps a slow 4-second strip turn), and the whole booth runs one wide 1680px column on large monitors (every tab, one width). Kiln settings carry knob-notes (octree = carving grid, threshold = voxel skin cut, seed = paint+mesh dice). Approved pairs surface in-booth on **the Prop Shelf** (`/api/shelf/list` reads pack-queue/ back as the Workshop's own prop library, married to each firing's record — consumers like the town sketches' `pack-props.mjs` come to the shelf, not the reverse), and the Rack carries a third verdict: **Discard** breaks a pending firing for good behind the break-pit confirm dialog (`rack_discard` — pending only, approved/superseded stay as the audit trail). three.js is an npm dep of the front (pinned 0.177, a lazy chunk — the vendor dir retired with the single-file era at the #00063 cutover). |
 
+## Containment — the Sentinel, the lock on `main`, and how a change lands
+
+The blueprint gates itself. **`.github/workflows/sentinel.yml`** (armed
+2026-07-31, PR #5, after Librarian audit #00003 found the Workshop was the one
+PUBLIC lab repo with no CI at all) runs on every push to `main` and every PR
+against it, in two jobs:
+
+| Job | What it guards | The gate set |
+|---|---|---|
+| **proscenium** | the front — `prompter-box/front/` (Vue 3 + strict TS) | `npm ci`, then `npm run lint` (oxlint), `npm run typecheck` (`vue-tsc --noEmit`), `npx vitest run`, `npm run check:dist` (rebuilds and fails on a stale committed `static/` bundle) |
+| **kiln-room** | the Kiln Room's Python spine and the booth's HTTP layer | `pip install numpy pillow scipy trimesh pytest`, then `python -m pytest prompter-box/tests/` — fixture-driven, no GPU, pyrender deliberately absent (`turntable.py` lazy-imports it only on the real EGL path, which this suite never takes) |
+
+**No job fires the machines.** A green Sentinel means the blueprint is sound,
+not that the bench can perform — that stays the live-fire gate's job.
+
+This repo is one of the four PUBLIC lab repos, so the 2026-06-16 Sentinel
+quota freeze does not touch it: **these runs actually happen, and their red is
+real.** Locally the same gates are `cd prompter-box/front && npm run lint &&
+npm run typecheck && npx vitest run && npm run check:dist` and
+`python -m pytest prompter-box/tests/` (ComfyUI venv python — see
+`prompter-box/requirements.txt`).
+
+### The merge path
+
+**`main` is branch-PROTECTED (a direct push is refused with GH006).** A change
+lands like this, and never any other way:
+
+1. Branch in the checkout you are working from, off the `origin/main` tip —
+   fetch and confirm first. The bench at `~/code/video-lab` and the lab's
+   submodule copy drift apart; whichever one you cut from, verify ITS baseline.
+2. Run every gate above locally. The Sentinel will run them again, but a red
+   PR costs a round trip.
+3. Push the branch and open a PR (`gh pr create --head <branch>`).
+4. **The investor's merge is the authorization** — squash-merge, which mints a
+   NEW commit SHA on `main`.
+5. Because the SHA is new, the parent lab repo's gitlink is orphaned until it
+   is re-pointed at the merged commit. Re-point it AFTER the merge, in the
+   parent repo, as a `sync(workshop): ...` commit. `git status` in the parent
+   looks clean while the gitlink is stale, so this step has to be deliberate.
+
+When a session changes **what** gates this repo, this section is part of that
+change — not follow-up. The journal turns with the gates.
+
 ## Conventions
 
 - Stdlib-only Python for the instruments — no venvs of our own; the machines
