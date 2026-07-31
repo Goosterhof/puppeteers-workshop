@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {computed} from 'vue';
 import Callboard from './components/Callboard.vue';
+import {slugify} from './lib/slugify';
 import ArchiveRoom from './rooms/ArchiveRoom.vue';
 import FaceRoom from './rooms/FaceRoom.vue';
 import FoleyRoom from './rooms/FoleyRoom.vue';
@@ -45,6 +46,40 @@ const WINGS: {head: string; ids: string[]}[] = [
 ];
 const line = (id: string) => TABS.find(t => t.id === id)!;
 const activeLabel = computed(() => TABS.find(t => t.id === active.value)?.label ?? '');
+const wingId = (head: string) => `wing-${slugify(head)}`;
+
+// The binder is a real ARIA tablist, so it owes the whole pattern (enhancement
+// report #00009, P2-6): panels linked back to their tabs, ONE tab in the tab
+// order at a time, and the arrows walking the rail once focus is on it. The
+// wings are presentational — a tablist may only own tabs, so the wing head
+// hands its name to each thumb-tab through aria-describedby instead of
+// wrapping them in a group the pattern forbids.
+const RAIL = WINGS.flatMap(w => w.ids); // rail order, top to bottom — what the arrows walk
+const thumbTabs: Record<string, HTMLButtonElement> = {};
+const registerTab = (id: string, el: unknown) => {
+    if (el instanceof HTMLButtonElement) thumbTabs[id] = el;
+};
+
+// Automatic activation: the rail's panels are already mounted and cost nothing
+// to show, so focus and selection travel together — no second keystroke to
+// open the page the reader just arrived at.
+const STEP: Record<string, (i: number) => number> = {
+    ArrowDown: i => (i + 1) % RAIL.length,
+    ArrowRight: i => (i + 1) % RAIL.length,
+    ArrowUp: i => (i + RAIL.length - 1) % RAIL.length,
+    ArrowLeft: i => (i + RAIL.length - 1) % RAIL.length,
+    Home: () => 0,
+    End: () => RAIL.length - 1,
+};
+function turnThePage(event: KeyboardEvent, from: string) {
+    const step = STEP[event.key];
+    const here = RAIL.indexOf(from);
+    if (!step || here < 0) return;
+    event.preventDefault();
+    const id = RAIL[step(here)]!;
+    active.value = id;
+    thumbTabs[id]?.focus();
+}
 </script>
 
 <template>
@@ -56,19 +91,28 @@ const activeLabel = computed(() => TABS.find(t => t.id === active.value)?.label 
           <div class="folio">open to <b>{{ activeLabel }}</b></div>
         </div>
 
-        <section v-for="t in TABS" v-show="active === t.id" :id="`tab-${t.id}`" :key="t.id">
+        <section
+          v-for="t in TABS" v-show="active === t.id" :id="`panel-${t.id}`" :key="t.id"
+          role="tabpanel" :aria-labelledby="`tab-${t.id}`"
+        >
           <component :is="t.room" :active="active === t.id" />
         </section>
       </div>
     </main>
 
-    <nav class="rail" role="tablist" aria-label="The ring-binder — thumb-tabs down the stage-right wing">
-      <div v-for="w in WINGS" :key="w.head" class="wing" role="group" :aria-label="w.head">
-        <div class="wing-head">{{ w.head }}</div>
+    <nav
+      class="rail" role="tablist" aria-orientation="vertical"
+      aria-label="The ring-binder — thumb-tabs down the stage-right wing"
+    >
+      <div v-for="w in WINGS" :key="w.head" class="wing" role="presentation">
+        <div :id="wingId(w.head)" class="wing-head" role="presentation">{{ w.head }}</div>
         <button
-          v-for="id in w.ids" :key="id" role="tab" class="tab"
-          :aria-selected="active === id" :data-tab="id"
-          @click="active = id"
+          v-for="id in w.ids" :id="`tab-${id}`" :key="id" :ref="el => registerTab(id, el)"
+          role="tab" class="tab"
+          :aria-selected="active === id" :aria-controls="`panel-${id}`"
+          :aria-describedby="wingId(w.head)" :tabindex="active === id ? 0 : -1"
+          :data-tab="id"
+          @click="active = id" @keydown="turnThePage($event, id)"
         >{{ line(id).label }}</button>
       </div>
     </nav>

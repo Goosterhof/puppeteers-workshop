@@ -25,8 +25,18 @@ installed on the workshop floor and are **never tracked**:
 
 **The canonical working bench is `~/code/video-lab`** — the only checkout with
 the machines installed. The lab's submodule at `gadgets/puppeteers-workshop`
-is the blueprint copy for the manifest; do the work on the bench, push, then
-bump the lab's ref (submodule discipline).
+is the blueprint copy for the manifest.
+
+**Where work lands.** It used to read *"do the work on the bench, push, then
+bump the lab's ref"*, and that stopped being true when `main` was protected:
+a change now lands as a PR from **whichever checkout it was written in** — the
+bench or the blueprint — and the parent's gitlink is re-pointed after the
+squash-merge (see The merge path below). The bench's standing duty is
+therefore to **pull, not to push first**: `git -C ~/code/video-lab pull
+--ff-only` before a bench session, so the machines are driven by current
+instruments. A stale bench branches from a stale base and builds against
+whatever dependency versions it last saw — it sat eight commits behind and one
+`ui-inputs` major back when enhancement report #00009 caught it (P2-8).
 
 ## The instruments
 
@@ -52,6 +62,12 @@ against it, in two jobs:
 
 **No job fires the machines.** A green Sentinel means the blueprint is sound,
 not that the bench can perform — that stays the live-fire gate's job.
+
+`npm run test:coverage` is an instrument, not a gate — no threshold fails a
+build. It reports the **whole** `src/` tree (`coverage.include` in
+`vitest.config.ts`), so a room nobody has specced reads zero instead of going
+missing from the table. Read the number as a map of what is unwatched; the
+84% it used to print was a subset of the files a spec happened to import.
 
 This repo is one of the four PUBLIC lab repos, so the 2026-06-16 Sentinel
 quota freeze does not touch it: **these runs actually happen, and their red is
@@ -94,7 +110,13 @@ change — not follow-up. The journal turns with the gates.
   pulls, never builds.
 - Commit scope: `workshop` (see the lab's Commit Doctrine).
 - Gadget containment protocols apply: the Prompter's Box carries the
-  `prefers-reduced-motion` floor in its single-page CSS.
+  `prefers-reduced-motion` floor in both halves the lab's protocol asks for.
+  The CSS surface is a `@media (prefers-reduced-motion: reduce)` preflight in
+  `prompter-box/front/uno.config.ts` (~line 199) — the single-page CSS it used
+  to live in was struck at the #00063 cutover. The animated surfaces each
+  consult `matchMedia` renderer-side, because a JS-driven loop never sees the
+  CSS: `PottersWheel.vue` (the wheel's idle turn), `ShelfRoom.vue` (the shelf
+  strip) and `RackRoom.vue` (the 500 ms rack cadence, frozen at frame 0).
 - The GPU is a one-performance stage: anything that loads a model goes through
   the Prompter's Box guard (`clear_the_set()`) or checks `nvidia-smi` first.
   Never weaken the guard to best-effort — see runbook §The Stagehands' Guard.
