@@ -68,17 +68,25 @@ def evict_llms():
     return evicted
 
 
-def gpu_vram_free_gb():
-    """VRAM truth straight from the driver — ComfyUI's self-report lags."""
+def gpu_vram_gb():
+    """(free, total) VRAM truth straight from the driver — ComfyUI's
+    self-report lags, and the driver answers even when ComfyUI is dark
+    (Chaos #00085 detonation 2: the dimmer falls back to this)."""
     try:
         out = subprocess.run(
             ["nvidia-smi", "--query-gpu=memory.total,memory.used", "--format=csv,noheader,nounits"],
             capture_output=True, text=True, timeout=5,
         )
         total, used = (int(v.strip()) for v in out.stdout.strip().split(","))
-        return (total - used) / 1024
+        return ((total - used) / 1024, total / 1024)
     except (OSError, ValueError):
         return None
+
+
+def gpu_vram_free_gb():
+    """The free half of gpu_vram_gb — the guard's own instrument."""
+    vram = gpu_vram_gb()
+    return vram[0] if vram else None
 
 
 def ram_available_gb():

@@ -11,7 +11,9 @@ export interface LoadedModel {
 // The /api/status payload — the callboard's whole vocabulary, typed once.
 export interface StatusPayload {
     forge: {up: boolean; loaded: LoadedModel[]};
-    face_shop: {up: boolean; vram_free_gb: number; vram_total_gb: number};
+    face_shop: {up: boolean; vram_free_gb: number; vram_total_gb: number; painting?: boolean};
+    // driver truth via nvidia-smi — answers even when the Face Shop is dark
+    gpu?: {vram_free_gb: number; vram_total_gb: number} | null;
     stage_job: {state: string; model?: string};
     stage_ui: {up: boolean};
     foley: {installed: boolean; job_state?: string};
@@ -32,7 +34,8 @@ export interface StageLoad {
 export function stationState(s: StatusPayload): StationStates {
     return {
         forge: !s.forge.up ? 'dark' : s.forge.loaded.length ? 'standby' : 'ready',
-        face: s.face_shop.up ? 'standby' : 'dark',
+        // a running paint — booth-cued or full-UI — is a performance (#00085)
+        face: !s.face_shop.up ? 'dark' : s.face_shop.painting ? 'live' : 'standby',
         stage: s.stage_job.state === 'running' ? 'live'
             : s.stage_ui.up ? 'held' : 'dark', // held, not green — a held stage refuses every cue
         foley: !s.foley.installed ? 'dark'
@@ -48,7 +51,7 @@ export function stationReads(s: StatusPayload, st: StationStates): StationReads 
     return {
         forge: st.forge === 'standby'
             ? s.forge.loaded.map(m => `${m.model} ${m.size_gb} GB`).join(' · ') : '',
-        face: '',
+        face: st.face === 'live' ? 'mid-paint' : '',
         stage: st.stage === 'live' ? (s.stage_job.model || 'mid-take')
             : st.stage === 'held' ? 'the full UI holds :7860' : '',
         foley: st.foley === 'live' ? 'scoring' : '',
@@ -57,13 +60,17 @@ export function stationReads(s: StatusPayload, st: StationStates): StationReads 
     };
 }
 
-// The dimmer: the only VRAM truth the poll carries is the Face Shop's —
-// no invented numbers when it is dark.
+// The dimmer: the Face Shop's self-report first; when it is dark, the driver
+// (nvidia-smi, the guard's own instrument) so the meter never reads "no
+// meter" while the GPU is alive (#00085 detonation 2). No invented numbers —
+// the meter only goes dark when the driver itself is silent.
+const meter = (free: number, total: number, source = ''): StageLoad => ({
+    pct: Math.max(0, Math.min(100, (1 - free / total) * 100)),
+    read: `${free} / ${total} GB free${source}`,
+});
+
 export function stageLoad(s: StatusPayload): StageLoad {
-    if (!s.face_shop.up) return {pct: 0, read: '— no meter · Face Shop dark'};
-    const {vram_free_gb: free, vram_total_gb: total} = s.face_shop;
-    return {
-        pct: Math.max(0, Math.min(100, (1 - free / total) * 100)),
-        read: `${free} / ${total} GB free`,
-    };
+    if (s.face_shop.up) return meter(s.face_shop.vram_free_gb, s.face_shop.vram_total_gb);
+    if (s.gpu) return meter(s.gpu.vram_free_gb, s.gpu.vram_total_gb, ' · driver');
+    return {pct: 0, read: '— no meter · the driver is silent'};
 }

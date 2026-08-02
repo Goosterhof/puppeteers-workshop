@@ -3,23 +3,20 @@ import {TextInput} from '@script-development/ui-inputs';
 import {computed, nextTick, ref, watch} from 'vue';
 import CanisterCard from '../components/CanisterCard.vue';
 import FilterPills from '../components/FilterPills.vue';
-import {canisterChips, filterArchive, ROOMS} from '../lib/canisters';
+import StampedMount from '../components/StampedMount.vue';
+import type {MountAct} from '../components/StampedMount.vue';
+import {age, filterArchive, ROOMS} from '../lib/canisters';
 import type {ShelfItem} from '../lib/canisters';
 import {archive, loadArchive} from '../stores/archive';
 import {castAsLead, leadRes, loadFoleySources, openTab} from '../stores/booth';
 
 const props = withDefaults(defineProps<{active?: boolean}>(), {active: false});
 
-interface ShelfAct {
-    label: string;
-    run: (act: ShelfAct) => void | Promise<void>;
-}
-
 const search = ref('');
 const room = ref('');
 const kind = ref('');
 const mounted = ref<ShelfItem | null>(null);
-const acts = ref<ShelfAct[]>([]);
+const acts = ref<MountAct[]>([]);
 const view = ref<HTMLElement | null>(null);
 
 const items = computed(() => filterArchive(archive.value, {room: room.value, kind: kind.value, search: search.value}));
@@ -29,22 +26,20 @@ const countLine = computed(() => items.value.length
     : filtered.value ? 'No canister answers that description — loosen a filter.'
     : 'The shelves are bare — nothing developed yet. Every Stage take, painting, and score lands here on its own.');
 
+// The archive mount is a Print like every fresh take (#00085 detonation 3):
+// same paper, same chips — the age stamp sits where Fresh sits.
 const mountedSrc = computed(() => mounted.value
     ? ROOMS[mounted.value.room].src + encodeURIComponent(mounted.value.name) : '');
-const capText = computed(() => {
-    if (!mounted.value) return '';
-    const it = mounted.value;
-    const label = canisterChips(it).map(([text]) => text).join(' · ');
-    const cue = it.meta?.prompt ? `“${it.meta.prompt}” — ` : '';
-    return `${cue}${it.name} · ${label} `;
-});
+const mountedTitle = computed(() => !mounted.value ? ''
+    : mounted.value.meta?.prompt ? `“${mounted.value.meta.prompt}” — ${mounted.value.name}`
+    : mounted.value.name);
 
-function buildActs(it: ShelfItem): ShelfAct[] {
-    const rows: ShelfAct[] = [];
+function buildActs(it: ShelfItem): MountAct[] {
+    const rows: MountAct[] = [];
     if (it.meta?.prompt) {
-        rows.push({label: 'Copy the cue', run: act => {
+        rows.push({label: 'Copy the cue', run: ctx => {
             navigator.clipboard.writeText(it.meta!.prompt!);
-            act.label = 'Cue copied';
+            ctx.relabel('Cue copied');
         }});
     }
     if (it.room === 'stage' && it.kind === 'video') {
@@ -54,15 +49,15 @@ function buildActs(it: ShelfItem): ShelfAct[] {
         }});
     }
     if (it.room === 'stage' && it.kind === 'image') {
-        rows.push({label: 'Cast as a lead →', run: async act => {
+        rows.push({label: 'Cast as a lead →', run: async ctx => {
             await castAsLead(it.name, 'stage');
-            act.label = 'Cast — it is in the footage now';
+            ctx.relabel('Cast — it is in the footage now');
         }});
     }
     if (it.room === 'face') {
-        rows.push({label: 'Send to the stage →', run: async () => {
+        rows.push({label: 'Send to the stage →', run: async ctx => {
             await castAsLead(it.name);
-            const img = view.value?.querySelector('img');
+            const img = ctx.el?.querySelector('img');
             if (img?.naturalWidth) leadRes.value = {w: img.naturalWidth, h: img.naturalHeight};
             openTab('stage');
         }});
@@ -109,14 +104,12 @@ watch(() => props.active, a => {
     </div>
     <p id="arch-count" class="note">{{ countLine }}</p>
     <div id="arch-view" ref="view" class="result">
-      <template v-if="mounted">
-        <img v-if="mounted.kind === 'image'" :src="mountedSrc" :alt="mounted.name">
-        <video v-else-if="mounted.kind === 'video'" :src="mountedSrc" controls loop></video>
-        <audio v-else :src="mountedSrc" controls></audio>
-        <span class="cap">{{ capText }}
-          <button v-for="(act, i) in acts" :key="i" class="cast" @click="act.run(act)">{{ act.label }}</button>
-        </span>
-      </template>
+      <StampedMount
+        v-if="mounted"
+        :key="`${mounted.room}/${mounted.name}`"
+        :room="mounted.room" :url="mountedSrc" :kind="mounted.kind || 'video'"
+        :title="mountedTitle" :meta="mounted.meta" :stamp="age(mounted.mtime)" :acts="acts"
+      />
     </div>
     <!-- the thumbrow class rides along like the old markup — its 2px transparent
          border and .75 opacity on card images are part of the booth's look -->
@@ -128,11 +121,4 @@ watch(() => props.active, a => {
 
 <style>
 #arch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; margin-top: 16px; }
-#arch-view video, #arch-view img { max-width: 100%; max-height: 65vh; border-radius: 3px; box-shadow: 0 4px 18px rgba(0,0,0,.5); }
-.cast {
-  background: none; border: 1px solid var(--drape-edge); color: var(--dim);
-  font: 11px var(--display); letter-spacing: .16em; text-transform: uppercase;
-  padding: 5px 11px; cursor: pointer; border-radius: 2px; margin-left: 10px;
-}
-.cast:hover { border-color: var(--lamp); color: var(--lamp); }
 </style>
