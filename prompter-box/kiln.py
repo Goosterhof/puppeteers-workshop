@@ -54,7 +54,10 @@ DEFAULT_THRESHOLD = 0.5
 REFIRE_OCTREE = 224        # the known cure for the known failure (thin structures)
 REFIRE_THRESHOLD = 0.4     # softer threshold keeps thin features as material
 ALPHA_BBOX_PAD = 6         # the +6 px crop law — uncropped hides dress props in magenta
-KEY_TOLERANCE = 20.0       # the Keymaster's own chroma distance
+KEY_TOLERANCE = 25.0       # the furniture law's FLOOR (was 20, the Keymaster's flat
+                           # distance) — the keyer now measures against a local
+                           # gradient model, so the working tol is
+                           # max(floor, ring-residual p99.9 × 1.6)
 KEY_MIN_ISLAND = 3000      # enclosed pockets of true ground (inside an arm akimbo)
 BORDER_RING = 10
 VIGNETTE_CROP = 14         # Klein stills wear a ~14 px darker edge vignette that
@@ -267,12 +270,71 @@ def fire_mesh(hide_path, octree=DEFAULT_OCTREE, threshold=DEFAULT_THRESHOLD,
 
 # ----------------------------------------------------------- the image laws
 
+def fit_background_gradient(rgb, ring_width=BORDER_RING):
+    """Fit a quadratic background surface ([1, x, y, x², y², xy] per channel,
+    lstsq) from the border ring. Krea RAW grounds are GRADIENTS — ring
+    residuals run ~80 chroma units corner-to-corner, so a flat ring median
+    trips the fail-closed border check on a clean firing (the square-back
+    patron arc, 2026-08-02). The local model absorbs the gradient.
+
+    Before the fit, ring pixels far off the ring's flat median (distance >
+    median + 6×MAD) are dropped: a subject bleeding into the ring would
+    otherwise both skew the surface AND inflate the residual percentile
+    until the tolerance swallowed the subject whole — quietly defeating
+    the border refusal the whole gate exists for. On a clean plate the
+    pre-trim keeps every ring pixel and the fit is exactly the recorded
+    law. Returns (bgmap, ring residuals against the surface)."""
+    h, w, _ = rgb.shape
+    yy, xx = np.mgrid[0:h, 0:w]
+    ring = np.zeros((h, w), bool)
+    ring[:ring_width] = ring[-ring_width:] = True
+    ring[:, :ring_width] = ring[:, -ring_width:] = True
+    ring_px = rgb[ring].astype(np.float32)
+    flat = np.median(ring_px, axis=0)
+    d_flat = np.sqrt(((ring_px - flat) ** 2).sum(axis=1))
+    med = float(np.median(d_flat))
+    mad = float(np.median(np.abs(d_flat - med)))
+    keep = d_flat <= med + 6 * mad + 2.0
+    if int(keep.sum()) < 6:
+        keep[:] = True
+    inlier = np.zeros((h, w), bool)
+    inlier[ring] = keep
+    a = np.stack([np.ones(int(inlier.sum())), xx[inlier], yy[inlier],
+                  xx[inlier] ** 2, yy[inlier] ** 2, (xx * yy)[inlier]],
+                 axis=1).astype(np.float64)
+    a_full = np.stack([np.ones(h * w), xx.ravel(), yy.ravel(),
+                       (xx ** 2).ravel(), (yy ** 2).ravel(),
+                       (xx * yy).ravel()], axis=1).astype(np.float64)
+    bgmap = np.zeros((h, w, 3), np.float32)
+    for c in range(3):
+        coef, *_ = np.linalg.lstsq(
+            a, rgb[..., c][inlier].astype(np.float64), rcond=None)
+        bgmap[..., c] = (a_full @ coef).reshape(h, w).astype(np.float32)
+    res = np.sqrt(((rgb.astype(np.float32) - bgmap) ** 2).sum(axis=2))
+    return bgmap, res[inlier]
+
+
+def _chroma_green(mean_rgb):
+    """The chroma-green island gate: key-green pockets between limbs always
+    qualify (mean g > r+60 AND g > b+40 AND g > 150); olive orc skin never
+    does. Proven keying a green-skinned orc off a green field with border
+    alpha exactly 0 (the square-back patron arc)."""
+    r, g, b = float(mean_rgb[0]), float(mean_rgb[1]), float(mean_rgb[2])
+    return g > r + 60 and g > b + 40 and g > 150
+
+
 def key_prop_image(png_path, tolerance=KEY_TOLERANCE, min_island=KEY_MIN_ISLAND):
     """The Keymaster's border-connected topology gate, adapted to a still:
-    only regions that touch the frame border (or enclosed pockets larger
-    than min_island) are keyed, so a subject's face can never be eaten.
-    Border alpha must land at EXACTLY 0 after keying, or the gate fails
-    closed and the firing is refused — never silently shipped translucent.
+    only regions that touch the frame border (or enclosed pockets that are
+    min_island-large or chroma-green) are keyed, so a subject's face can
+    never be eaten. Border alpha must land at EXACTLY 0 after keying, or
+    the gate fails closed and the firing is refused — never silently
+    shipped translucent.
+
+    The ground is measured against a QUADRATIC surface fit from the border
+    ring (see fit_background_gradient) with tol = max(floor, ring-residual
+    p99.9 × 1.6) — the furniture law that let the keyer accept Krea RAW
+    gradient grounds a flat median refused.
 
     The ~14 px edge vignette Klein paints on a still is cropped BEFORE the
     ring is sampled — vignetted corners sit ~55 chroma-distance units off
@@ -283,25 +345,28 @@ def key_prop_image(png_path, tolerance=KEY_TOLERANCE, min_island=KEY_MIN_ISLAND)
     rgb = np.asarray(Image.open(png_path).convert("RGB"))
     if min(rgb.shape[:2]) > 4 * VIGNETTE_CROP:
         rgb = rgb[VIGNETTE_CROP:-VIGNETTE_CROP, VIGNETTE_CROP:-VIGNETTE_CROP]
-    h, w, _ = rgb.shape
-    ring = np.concatenate([
-        rgb[:BORDER_RING].reshape(-1, 3),
-        rgb[-BORDER_RING:].reshape(-1, 3),
-        rgb[:, :BORDER_RING].reshape(-1, 3),
-        rgb[:, -BORDER_RING:].reshape(-1, 3),
-    ])
-    bg = np.median(ring, axis=0)
-    dist = np.sqrt(((rgb.astype(np.float32) - bg) ** 2).sum(axis=2))
-    candidate = dist < tolerance
+    return key_prop_pixels(rgb, tolerance=tolerance, min_island=min_island)
+
+
+def key_prop_pixels(rgb, tolerance=KEY_TOLERANCE, min_island=KEY_MIN_ISLAND):
+    """The array half of key_prop_image, for callers whose frames carry no
+    Klein vignette (i2v output — the stance cutter keys those directly)."""
+    bgmap, ring_res = fit_background_gradient(rgb)
+    dist = np.sqrt(((rgb.astype(np.float32) - bgmap) ** 2).sum(axis=2))
+    tol = max(float(tolerance), float(np.percentile(ring_res, 99.9)) * 1.6)
+    candidate = dist < tol
     labels, count = ndimage.label(candidate)
     if count:
         border_labels = np.unique(np.concatenate([
             labels[0], labels[-1], labels[:, 0], labels[:, -1]]))
-        sizes = ndimage.sum_labels(np.ones_like(labels), labels,
-                                   index=np.arange(1, count + 1))
         keep = np.zeros(count + 1, dtype=bool)
         keep[border_labels] = True
-        keep[1:][sizes >= min_island] = True
+        for lab in range(1, count + 1):
+            if keep[lab]:
+                continue
+            mask = labels == lab
+            if int(mask.sum()) >= min_island or _chroma_green(rgb[mask].mean(axis=0)):
+                keep[lab] = True
         keep[0] = False
         keyed = keep[labels]
     else:
@@ -332,6 +397,30 @@ def despill_purple_gate(rgb):
     cure = np.clip(np.rint(g.astype(np.float32) * 1.05), 0, 255).astype(rgb.dtype)
     out[..., 0][gate] = cure[gate]
     out[..., 2][gate] = cure[gate]
+    return out
+
+
+def despill_green_gate(rgb, alpha, edge_band=3):
+    """The green-ground despill law (the square-back patron arc): screaming
+    green anywhere on the subject (g > r+60 AND g > b+60) is cured to
+    (r+b)/2 — olive skin fails the gate and is never touched. A 3 px
+    edge band gets a laxer gate (g > r+25 AND g > b+25, cured to
+    max(r, b)) because fringe spill hugs the silhouette at half strength.
+    Pass edge_band=0 to skip the band (stills keyed off a clean gradient
+    rarely need it; i2v frames always do)."""
+    out = rgb.copy()
+    r = rgb[..., 0].astype(np.int16)
+    g = rgb[..., 1].astype(np.int16)
+    b = rgb[..., 2].astype(np.int16)
+    subject = alpha > 0
+    gate = subject & (g > r + 60) & (g > b + 60)
+    cure = ((r + b) // 2).astype(rgb.dtype)
+    out[..., 1][gate] = cure[gate]
+    if edge_band:
+        edge = subject & ~ndimage.binary_erosion(subject, iterations=edge_band)
+        egate = edge & (g > r + 25) & (g > b + 25)
+        ecure = np.maximum(r, b).astype(rgb.dtype)
+        out[..., 1][egate] = ecure[egate]
     return out
 
 

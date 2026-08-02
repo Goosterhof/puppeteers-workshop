@@ -41,7 +41,7 @@ video-lab/
 | `flux-2-klein-9b-BF16.gguf` | `ComfyUI/models/diffusion_models/` | `unsloth/FLUX.2-klein-9B-GGUF` | ungated; full precision, ~18 GB — fits the 5090 |
 | `qwen_3_8b_fp8mixed.safetensors` | `ComfyUI/models/text_encoders/` | `Comfy-Org/flux2-klein-9B` | ungated |
 | `flux2-vae.safetensors` | `ComfyUI/models/vae/` | `Comfy-Org/flux2-dev` | ungated |
-| `hunyuan_3d_v2.1.safetensors` | `ComfyUI/models/checkpoints/` | `Comfy-Org/hunyuan3D_2.1_repackaged` | ungated; 7.4 GB all-in-one (DiT + CLIP-vision + VAE). **The latent kiln** — image→GLB mesh via ComfyUI-native nodes (`ImageOnlyCheckpointLoader → CLIPVisionEncode → Hunyuan3Dv2Conditioning → KSampler 30 steps cfg 5 → VAEDecodeHunyuan3D → VoxelToMesh "surface net" → SaveGLB`); ~30 s per mesh on the 5090. Shape only — no texture stage in core ComfyUI; planar-project the source painting in the consumer (edge-pad the keyed texture first, seeding from interior colors so the outline ring never smears). First firing: the Menagerie's Carousel Figure (2026-07-10) |
+| `hunyuan_3d_v2.1.safetensors` | `ComfyUI/models/checkpoints/` | `Comfy-Org/hunyuan3D_2.1_repackaged` | ungated; 7.4 GB all-in-one (DiT + CLIP-vision + VAE). **The latent kiln** — image→GLB mesh via ComfyUI-native nodes (`ImageOnlyCheckpointLoader → CLIPVisionEncode → Hunyuan3Dv2Conditioning → KSampler 30 steps cfg 5 → VAEDecodeHunyuan3D → VoxelToMesh "surface net" → SaveGLB`); ~30 s per mesh on the 5090. Shape only — no texture stage in core ComfyUI; planar-project the source painting in the consumer (edge-pad the keyed texture first, seeding from interior colors so the outline ring never smears). **Web-prop firing settings (2026-07-11, De Wandeling):** `octree_resolution: 128` keeps a prop under 3 MB (default 256 → ~11 MB surface-net mesh), silhouette fine at walking distance; refiring the same LoadImage + seed hits the cached KSampler latent — decode+mesh only, seconds not 30, so octree/threshold iteration is nearly free. Prompt-side: keep the chroma-key color disjoint from the subject's palette ("bronze with green patina" poisoned a green screen — magenta rescued it), and removing an iconic part fails as negation at cfg=1 — strong positive story phrasing ("sails dismounted and taken away for restoration") works on every seed. Kiln meshes bake y-up: trust it — axis-guessing laid a monument on its side. First firing: the Menagerie's Carousel Figure (2026-07-10) |
 | SCAIL-2 / OmniVoice / LTX2 | Wan2GP manages | auto-download on first use | pick in the Wan2GP UI |
 
 **Gated upgrade path:** the official `black-forest-labs/FLUX.2-klein-9b-fp8` safetensors
@@ -313,6 +313,59 @@ python (Wan2GP, ComfyUI, and MMAudio all carry all three), e.g.
 `ComfyUI/.venv/bin/python prompter-box/keymaster.py …`. It shells out to the
 static ffmpeg in `~/.local/bin` for decode/encode (no torchcodec, so the
 shared-libs substrate is not needed here).
+
+## The Kiln's furniture laws (the Parlour square-back arc, 2026-08-02)
+
+Four chair firings and two table firings for the Parlour's fixed room extended
+the kiln recipe with five laws. Canonical write-up: the lab archive's
+`ai-video-generation.md` §Furniture Laws; the instrument side lives in this
+repo (`prompter-box/kiln.py`, `cut-stances.py`, `key-back.py`).
+
+1. **Hunyuan cannot hold an open-air table.** A tabletop on slender legs lost
+   its legs to voxelization at octree 224 AND 320 — two failures at both
+   resolutions is a shape limit, not bad luck. The cure is the **hybrid law**:
+   fire the PAINTING, crop it into per-face textures (top surface, edge rail,
+   leg strip), and mount on procedural box geometry that can never shred —
+   things that must be straight are born procedural. Chairs survive meshing
+   (their backs make them chunky); tables do not. Reach for the hybrid before
+   spending firings on leggy furniture meshes.
+2. **The painter has a proportion CEILING — measure the painting, never trust
+   the cue.** Across four cue variants the painter delivered ~40 cm backrests
+   and ~7 cm cushions against explicit asks of 75 cm and 3 cm. Cue real
+   anthropometrics in centimetres (it steers the right DIRECTION), then
+   measure the fired painting (a brown-band row scan finds the cushion line)
+   and derive the mount scale from the spec: `CHAIR_H = 0.45 / measured-seat-
+   fraction` puts the seat at a true 45 cm whatever the painter did.
+3. **Y-band surgery closes the last centimetres — project the painting
+   FIRST.** Bake the planar UVs before remapping vertex bands: projection-
+   then-surgery glues painted features to their vertices so the texture rides
+   the knife. The reverse order smears the cushion pixels across the frame.
+4. **Rear faces wear plain iron, and fired slabs shade like corrugation.**
+   Planar projection only owns what the painting saw — split rear-facing
+   triangles (face normal z < −0.15·len) onto an untextured material. Hunyuan
+   sculpts painted mottling as literal surface waves that shade into arc
+   bands under raking light; pull the panel region's normals to the slab
+   plane, silhouette untouched.
+5. **Krea RAW grounds are GRADIENTS — a flat-median keyer refuses them.**
+   Ring residuals run ~80 chroma units corner-to-corner, so the old flat
+   median tripped the fail-closed border check on a clean firing. The Kiln's
+   `key_prop_image` now fits a quadratic background surface from the border
+   ring (subject-in-ring pixels pre-trimmed so the refusal keeps firing),
+   keys with tol = max(25, ring-residual p99.9 × 1.6), chroma-gates enclosed
+   islands (key-green pockets between limbs always key; olive skin never
+   does), and `despill_green_gate` cures spill with a laxer 3 px edge band.
+
+**The graduated instruments** (both run with a machine venv's python, like the
+Keymaster):
+
+- `prompter-box/key-back.py SRC.jpg OUT.png` — key one still plate off its
+  green gradient ground: quadratic key + strong green despill + the +6 px
+  alpha-bbox crop.
+- `prompter-box/cut-stances.py TAKE.mp4 OUTDIR PREFIX [N]` — the Bull's
+  one-command stance cutter: stillest frame per beat window (base stance from
+  the take's own EARLY frames — the seam law), quadratic key + despill per
+  frame, foot-centroid registration with a zero-fill shift (never np.roll),
+  union crop at +6 px so every stance shares one canvas.
 
 ## Containment — the Sentinel and the merge path (armed 2026-07-31)
 
