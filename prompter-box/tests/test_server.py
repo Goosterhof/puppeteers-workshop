@@ -276,3 +276,63 @@ class TestTheOnePerformanceStage:
         status, body = cue(booth, "/api/kiln/generate", {"subject": "   "})
         assert status == 400
         assert "empty subject" in body["error"]
+
+
+def fake_comfy(stats=None, queue=None):
+    """A stand-in for http_json: answers /system_stats and /queue like the
+    real ComfyUI, or refuses like a dark one (stats/queue None → OSError)."""
+    def fake(url, payload=None, timeout=10):
+        if url.endswith("/system_stats"):
+            if stats is None:
+                raise OSError("dark")
+            return stats
+        if url.endswith("/queue"):
+            if queue is None:
+                raise OSError("dark")
+            return queue
+        raise OSError(f"unexpected probe: {url}")
+    return fake
+
+
+class TestTheCallboardTruth:
+    """Chaos #00085 detonations 1+2 — the /queue probe that lets the Face
+    Shop plate go live, and the dimmer's nvidia-smi driver fallback."""
+
+    STATS = {"devices": [{"vram_free": 6e9, "vram_total": 24e9}]}
+
+    @pytest.fixture(autouse=True)
+    def _quiet_floor(self, monkeypatch):
+        monkeypatch.setattr(server, "loaded_llms", lambda: None)
+        monkeypatch.setattr(server, "gpu_vram_gb", lambda: None)
+
+    def test_should_report_a_running_paint_so_the_face_plate_can_go_live(self, booth, monkeypatch):
+        monkeypatch.setattr(server, "http_json",
+                            fake_comfy(self.STATS, {"queue_running": [["job"]], "queue_pending": []}))
+        status, body = booth("GET", "/api/status")
+        assert status == 200
+        assert body["face_shop"] == {"up": True, "vram_free_gb": 6.0,
+                                     "vram_total_gb": 24.0, "painting": True}
+
+    def test_should_read_not_painting_when_the_queue_is_empty(self, booth, monkeypatch):
+        monkeypatch.setattr(server, "http_json",
+                            fake_comfy(self.STATS, {"queue_running": [], "queue_pending": []}))
+        _, body = booth("GET", "/api/status")
+        assert body["face_shop"]["painting"] is False
+
+    def test_should_never_fake_a_performance_when_the_queue_probe_fails(self, booth, monkeypatch):
+        monkeypatch.setattr(server, "http_json", fake_comfy(self.STATS, queue=None))
+        _, body = booth("GET", "/api/status")
+        assert body["face_shop"]["up"] is True
+        assert body["face_shop"]["painting"] is False
+
+    def test_should_fall_back_to_driver_vram_when_the_face_shop_is_dark(self, booth, monkeypatch):
+        monkeypatch.setattr(server, "http_json", fake_comfy(stats=None))
+        monkeypatch.setattr(server, "gpu_vram_gb", lambda: (20.42, 31.84))
+        _, body = booth("GET", "/api/status")
+        assert body["face_shop"] == {"up": False}
+        assert body["gpu"] == {"vram_free_gb": 20.4, "vram_total_gb": 31.8}
+
+    def test_should_leave_the_meter_dark_only_when_the_driver_is_silent(self, booth, monkeypatch):
+        monkeypatch.setattr(server, "http_json", fake_comfy(stats=None))
+        _, body = booth("GET", "/api/status")
+        assert body["gpu"] is None

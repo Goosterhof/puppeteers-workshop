@@ -29,7 +29,7 @@ from pathlib import Path
 # many callers, zero copies to drift.
 from stagehands import (  # noqa: F401  (re-exported names other rooms rely on)
     BASE, COMFY, COMFY_IN, COMFY_OUT, OLLAMA, WAN_UI_PORT,
-    clear_the_set, evict_llms, gpu_vram_free_gb, http_json,
+    clear_the_set, evict_llms, gpu_vram_free_gb, gpu_vram_gb, http_json,
     loaded_llms, port_open, ram_available_gb,
 )
 
@@ -674,13 +674,28 @@ class BoothWindow(BaseHTTPRequestHandler):
             dev = stats["devices"][0]
             comfy = {"up": True, "vram_free_gb": round(dev["vram_free"] / 1e9, 1),
                      "vram_total_gb": round(dev["vram_total"] / 1e9, 1)}
+            # Chaos #00085 detonation 1: without the /queue probe the Face
+            # Shop plate could never go LIVE — a running paint (booth-cued
+            # or full-UI) showed "warm". A failed probe reads not-painting,
+            # never a fake performance.
+            try:
+                comfy["painting"] = bool(http_json(f"{COMFY}/queue", timeout=2).get("queue_running"))
+            except (OSError, LookupError, AttributeError):
+                comfy["painting"] = False
         except (OSError, LookupError):
             comfy = {"up": False}
+        # Chaos #00085 detonation 2: the dimmer's fallback — driver truth via
+        # nvidia-smi, so the meter never reads "no meter" while the GPU is
+        # alive just because ComfyUI is dark.
+        gpu = None
+        if (vram := gpu_vram_gb()) is not None:
+            gpu = {"vram_free_gb": round(vram[0], 1), "vram_total_gb": round(vram[1], 1)}
         self.reply({
             "forge": {"up": llms is not None,
                       "loaded": [{"model": m["model"], "size_gb": round(m.get("size", 0) / 1e9, 1)}
                                  for m in llms or []]},
             "face_shop": comfy,
+            "gpu": gpu,
             "stage_ui": {"up": port_open(WAN_UI_PORT)},
             "stage_job": {k: v for k, v in stage_job.items() if k != "pid"},
             "foley": {"installed": MM_PY.exists(),

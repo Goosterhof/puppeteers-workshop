@@ -124,10 +124,13 @@ prompt-forge/promptsmith.py flux  "pirate captain portrait, warm rim light"
 prompt-forge/promptsmith.py relay "mascot greets the viewer, then rings the bell"
 ```
 
-Targets: `wan` (i2v motion-first, never redescribes the start-image character),
-`flux` (Klein 9B single-paragraph, positive-only), `relay` (LTX2 time-ranged
-segments). All three enforce the cfg=1 lesson: distilled models ignore negative
-prompts, so everything is phrased as what you WANT.
+Targets: `wan` (i2v motion-first, never redescribes the start-image character —
+made an EXPLICIT never-name-the-species clause 2026-08-02 after both forged
+variants for a triceratops walk cue invented taxonomy, "sauropod" and
+"theropod", which risks morphing the i2v character), `flux` (Klein 9B
+single-paragraph, positive-only), `relay` (LTX2 time-ranged segments). All
+three enforce the cfg=1 lesson: distilled models ignore negative prompts, so
+everything is phrased as what you WANT.
 
 **Coding chat** — `ollama run qwen3-coder:30b-a3b-q4_K_M` for an interactive
 session, or point any OpenAI-compatible client at `localhost:11434/v1`.
@@ -249,13 +252,17 @@ never scrolls — the folio does.
   Stage / Foley) each with a lamp-eye — ready green, standby amber, LIVE
   filament (one sun at most, per the mutex), HELD cue-red when the full Wan2GP
   UI occupies :7860 (a held stage refuses every cue — red, never green) — plus
-  a stage-load dimmer fed only by the Face Shop's real VRAM numbers ("— no
-  meter · Face Shop dark" when it isn't up; the poll carries no other VRAM
-  truth). Every generation cue auto-evicts loaded LLMs first; "Clear the
+  a stage-load dimmer fed by the Face Shop's real VRAM numbers, falling back
+  to driver truth (nvidia-smi, chaos #00085 det. 2) when ComfyUI is dark —
+  the meter only reads "— no meter" when the driver itself is silent. The
+  Face Shop plate goes LIVE on a running paint via a `/queue` probe (det. 1,
+  booth-cued or full-UI alike). Every generation cue auto-evicts loaded LLMs first; "Clear the
   boards" is the master blackout — lamps cool L→R, the reply voiced on the
   button. While a take runs the page's header wash warms (`body.take-running`).
   Fresh results mount as stamped prints (the archive's canister DNA with a
-  "Fresh" stamp instead of an age chip); design record in the lab's
+  "Fresh" stamp instead of an age chip), and a mounted archive canister wears
+  the SAME Print paper with its age where Fresh sits (chaos #00085 det. 3);
+  design record in the lab's
   `documents/wireframes/00037-wire-prompter-box-callboard.md`.
 - **The Stagehands' Guard (FAIL-CLOSED — incident 2026-07-09)** — before the
   forge loads an LLM (13 GB VRAM needed) or the Stage starts a take (26 GB

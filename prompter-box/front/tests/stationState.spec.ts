@@ -98,11 +98,34 @@ describe('stationState', () => {
         s.face_shop = {up: true} as StatusPayload['face_shop'];
         expect(stationState(s).face).toBe('standby');
     });
+
+    it('face: a running paint — booth-cued or full-UI — is live and reads mid-paint (#00085)', () => {
+        const s = darkStatus();
+        s.face_shop = {up: true, painting: true} as StatusPayload['face_shop'];
+        const st = stationState(s);
+        expect(st.face).toBe('live');
+        expect(stationReads(s, st).face).toBe('mid-paint');
+    });
 });
 
 describe('stageLoad', () => {
-    it('no invented numbers — a dark Face Shop carries no meter', () => {
-        expect(stageLoad(darkStatus())).toStrictEqual({pct: 0, read: '— no meter · Face Shop dark'});
+    it('no invented numbers — the meter only goes dark when the driver itself is silent', () => {
+        expect(stageLoad(darkStatus())).toStrictEqual({pct: 0, read: '— no meter · the driver is silent'});
+    });
+
+    it('a dark Face Shop falls back to driver truth so the meter stays lit (#00085)', () => {
+        const s = darkStatus();
+        s.gpu = {vram_free_gb: 20.4, vram_total_gb: 31.8};
+        const load = stageLoad(s);
+        expect(load.pct).toBeCloseTo((1 - 20.4 / 31.8) * 100);
+        expect(load.read).toBe('20.4 / 31.8 GB free · driver');
+    });
+
+    it('the Face Shop self-report outranks the driver when both answer', () => {
+        const s = darkStatus();
+        s.face_shop = {up: true, vram_free_gb: 6, vram_total_gb: 24};
+        s.gpu = {vram_free_gb: 20, vram_total_gb: 32};
+        expect(stageLoad(s).read).toBe('6 / 24 GB free');
     });
 
     it('a warm Face Shop reports occupancy from the only VRAM truth the poll carries', () => {
