@@ -56,6 +56,60 @@ class TestCropToAlphaBbox:
             kiln.crop_to_alpha_bbox(np.zeros((10, 10, 4), dtype=np.uint8))
 
 
+class TestDespillGreenGate:
+    """The green-ground despill law (the square-back patron arc): strong gate
+    on the whole subject, laxer gate on a 3 px edge band, olive untouched."""
+
+    def _plate(self, color):
+        rgb = np.zeros((20, 20, 3), dtype=np.uint8)
+        rgb[...] = color
+        alpha = np.full((20, 20), 255, dtype=np.uint8)
+        return rgb, alpha
+
+    def test_should_cure_screaming_green_on_the_subject_to_r_plus_b_over_2(self):
+        rgb, alpha = self._plate((60, 200, 50))
+        out = kiln.despill_green_gate(rgb, alpha, edge_band=0)
+        assert tuple(out[10, 10]) == (60, 55, 50)
+
+    def test_should_spare_olive_skin_because_the_gate_fails(self):
+        rgb, alpha = self._plate((100, 120, 60))
+        out = kiln.despill_green_gate(rgb, alpha)
+        assert tuple(out[10, 10]) == (100, 120, 60)
+
+    def test_should_cure_half_strength_fringe_only_in_the_edge_band(self):
+        rgb, alpha = self._plate((100, 140, 90))  # laxer gate only
+        out = kiln.despill_green_gate(rgb, alpha, edge_band=3)
+        assert tuple(out[0, 0]) == (100, 100, 90)    # edge: cured to max(r, b)
+        assert tuple(out[10, 10]) == (100, 140, 90)  # interior: untouched
+
+    def test_should_ignore_ground_pixels_entirely(self):
+        rgb, alpha = self._plate((60, 200, 50))
+        alpha[...] = 0
+        out = kiln.despill_green_gate(rgb, alpha)
+        assert tuple(out[10, 10]) == (60, 200, 50)
+
+
+def gradient_paint_fixture(path, size=200, box=(60, 60, 140, 140),
+                           pocket=(95, 95, 105, 105), subject=(100, 120, 60)):
+    """A Krea RAW stand-in: a key-green GRADIENT ground (~70 chroma units
+    corner-to-corner — a flat-median keyer refuses it at the border), an
+    olive subject block, and a small enclosed pocket of ground showing
+    through the subject (far below KEY_MIN_ISLAND — only the chroma-green
+    island gate can key it)."""
+    yy, xx = np.mgrid[0:size, 0:size].astype(np.float32)
+    rgb = np.zeros((size, size, 3), dtype=np.uint8)
+    rgb[..., 0] = (30 + 20 * xx / size).astype(np.uint8)
+    rgb[..., 1] = (160 + 60 * (xx + yy) / (2 * size)).astype(np.uint8)
+    rgb[..., 2] = (40 + 30 * yy / size).astype(np.uint8)
+    ground = rgb.copy()
+    x0, y0, x1, y1 = box
+    rgb[y0:y1, x0:x1] = subject                       # olive — near green, never keyed
+    px0, py0, px1, py1 = pocket
+    rgb[py0:py1, px0:px1] = ground[py0:py1, px0:px1]  # ground through a gap
+    Image.fromarray(rgb, "RGB").save(path)
+    return path
+
+
 class TestKeyPropImage:
     def test_should_key_the_ground_to_exactly_zero_border_alpha(self, tmp_path):
         painting = paint_fixture(tmp_path / "prop.png")
@@ -90,6 +144,32 @@ class TestKeyPropImage:
         Image.fromarray(img, "RGB").save(path)
         with pytest.raises(kiln.KilnRefusal, match="border alpha"):
             kiln.key_prop_image(path)
+
+    def test_should_key_a_krea_gradient_ground_the_flat_median_refused(self, tmp_path):
+        """The furniture law (square-back patron arc, 2026-08-02): the ground
+        is a smooth gradient, so the keyer fits a quadratic surface from the
+        border ring and keys against it locally — border alpha exactly 0."""
+        painting = gradient_paint_fixture(tmp_path / "krea.png")
+        rgba = kiln.key_prop_image(painting)
+        assert rgba[0].sum(axis=0)[3] == 0 and rgba[-1].sum(axis=0)[3] == 0
+        assert rgba[:, 0].sum(axis=0)[3] == 0 and rgba[:, -1].sum(axis=0)[3] == 0
+        assert rgba[60, 60, 3] == 255  # the olive subject survives (shifted by the crop)
+
+    def test_should_key_a_small_enclosed_pocket_only_because_it_is_chroma_green(self, tmp_path):
+        """The pocket is ~100 px — far below KEY_MIN_ISLAND, so only the
+        chroma-green island gate can key it. Olive skin never qualifies."""
+        painting = gradient_paint_fixture(tmp_path / "pocket.png")
+        rgba = kiln.key_prop_image(painting)
+        assert rgba[86, 86, 3] == 0    # the ground pocket (95,95 minus the 14 px crop)
+        assert rgba[60, 60, 3] == 255  # olive stays subject
+
+    def test_should_still_fail_closed_when_the_subject_bleeds_through_a_gradient_ring(self, tmp_path):
+        """The pre-trim law: a subject in the ring must not skew the surface
+        or inflate the tolerance until the border refusal stops firing."""
+        painting = gradient_paint_fixture(tmp_path / "gradient-bleed.png",
+                                          box=(80, 0, 120, 200), subject=(30, 30, 30))
+        with pytest.raises(kiln.KilnRefusal, match="border alpha"):
+            kiln.key_prop_image(painting)
 
 
 class TestOrientHint:
