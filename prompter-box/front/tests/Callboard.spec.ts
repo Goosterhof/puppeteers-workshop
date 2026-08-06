@@ -82,7 +82,7 @@ describe('Callboard — the footlight ledger', () => {
         w.unmount();
     });
 
-    it('the heartbeat keeps time, and a live take washes the whole booth amber', async () => {
+    it('the heartbeat keeps time, and a live take marks the body so the dog-ear can warm', async () => {
         const w = await raise(status({stage_job: {state: 'running'}}));
         expect(document.body.classList.contains('take-running')).toBe(true);
 
