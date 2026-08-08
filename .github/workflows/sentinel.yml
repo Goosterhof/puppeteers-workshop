@@ -89,3 +89,20 @@ jobs:
 
       - name: Test
         run: python -m pytest prompter-box/tests/
+
+  # ==================== GATE ====================
+  # The one context branch protection requires — the kendo ci-passed
+  # pattern brought home: always() so it runs whatever happens above,
+  # red on any failed or cancelled act, indifferent to acts a future
+  # path filter skips. Protection watches this curtain, not the stage.
+  sentinel-passed:
+    name: sentinel-passed
+    if: always()
+    needs:
+      - proscenium
+      - kiln-room
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
