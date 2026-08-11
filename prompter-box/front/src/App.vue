@@ -165,7 +165,7 @@ function turnThePage(event: KeyboardEvent, from: string) {
   background: var(--drape); border: 1px solid var(--drape-edge); border-right: none;
   color: var(--dim); font: 400 12.5px var(--display); letter-spacing: .14em; text-transform: uppercase;
   padding: 11px 14px; margin: 5px 0; border-radius: 4px 0 0 4px; position: relative;
-  transition: background .14s ease, color .14s ease;
+  transition: background .14s ease, color .14s ease, box-shadow .14s ease;
 }
 .rail .tab:hover { color: var(--paper); background: var(--drape-edge); }
 .rail .tab:focus-visible { outline: 2px solid var(--lamp-dim); outline-offset: -2px; }
@@ -175,6 +175,21 @@ function turnThePage(event: KeyboardEvent, from: string) {
   background: var(--paper); color: var(--ink); border-color: var(--paper);
   font-weight: 600; margin-left: -12px; padding-left: 26px; z-index: 3;
   box-shadow: -2px 0 0 var(--ink);
+}
+/* the dog-ear takes the heat (chaos #00109 D1): while a take runs, the booth
+   must not look idle. The signal it replaces was a page-wide amber wash on
+   <body> — struck, because the deck, the rail and the pit tile every pixel of
+   the body opaquely and no eye ever reached it. The mutex is a global fact
+   (one performance at a time), so the heat rides the one object that crosses
+   from the dark booth into the lit page. Value, never motion: the thumb-tab's
+   paper warms as if the lamp were turned up, and the ink hairline splits on a
+   filament seam. The seam is FRAMED in ink on purpose — --filament reads 12:1
+   against the booth but 1.15:1 against cream, so unframed on the page it would
+   repeat the original sin and paint where no eye can reach. */
+body.take-running .rail .tab[aria-selected="true"] {
+  background: color-mix(in srgb, var(--filament) 22%, var(--paper));
+  border-color: color-mix(in srgb, var(--filament) 22%, var(--paper));
+  box-shadow: -2px 0 0 var(--ink), -7px 0 0 var(--filament), -9px 0 0 var(--ink);
 }
 
 /* ===== Responsive — the right-docked window is the design case ===== */

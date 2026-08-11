@@ -258,7 +258,11 @@ never scrolls — the folio does.
   Face Shop plate goes LIVE on a running paint via a `/queue` probe (det. 1,
   booth-cued or full-UI alike). Every generation cue auto-evicts loaded LLMs first; "Clear the
   boards" is the master blackout — lamps cool L→R, the reply voiced on the
-  button. While a take runs the page's header wash warms (`body.take-running`).
+  button. While a take runs the active dog-ear warms (`body.take-running`):
+  the open room's thumb-tab takes a filament tint and its ink hairline splits
+  on a lit seam — the page under a hotter lamp. What this replaced was a
+  page-wide wash painted on `<body>`, under the opaque folio deck, where it
+  was never once seen (chaos #00109 D1).
   Fresh results mount as stamped prints (the archive's canister DNA with a
   "Fresh" stamp instead of an age chip), and a mounted archive canister wears
   the SAME Print paper with its age where Fresh sits (chaos #00085 det. 3);

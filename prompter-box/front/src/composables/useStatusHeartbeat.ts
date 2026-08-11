@@ -19,8 +19,10 @@ async function evict(): Promise<string[]> {
 
 // The callboard heartbeat — the /api/status poll behind the five lamps and
 // the dimmer (#00063 §1B). A failed poll goes cold immediately: every lamp
-// dark, no invented numbers. The take-running amber wash is a body class so
-// the mutex is felt page-wide, same as the single-file front.
+// dark, no invented numbers. `take-running` is a body class because the VRAM
+// mutex is a global fact, not a room's — but the heat it drives hangs on the
+// active dog-ear (App.vue), never on <body>: the folio deck, the rail and the
+// pit tile 100% of #app opaquely, so a body wash reaches no eye (#00109 D1).
 export function useStatusHeartbeat({intervalMs = 5000}: {intervalMs?: number} = {}) {
     const board = reactive<CallboardState>({
         cold: false,
