@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import {Checkbox, NumberInput, Textarea} from '@script-development/ui-inputs';
-import {onMounted, onUnmounted, ref} from 'vue';
+import {onMounted, onUnmounted, ref, watch} from 'vue';
 import LogWell from '../components/LogWell.vue';
 import PottersWheel from '../components/PottersWheel.vue';
 import {api} from '../composables/useBoothApi';
 import {createJobPoller} from '../composables/useJobPoller';
 import {openTab} from '../stores/booth';
+import {kilnKnobs} from '../lib/pins';
+import {kilnHandoff} from '../stores/pins';
 
 interface KilnCandidate {
     id: string;
@@ -35,6 +37,22 @@ const logLines = ref<string[]>([]);
 const logShown = ref(false);
 const candidate = ref<KilnCandidate | null>(null);
 const fired = ref(false);
+const settingsEl = ref<HTMLDetailsElement | null>(null);
+const formulaNote = ref('');
+
+// A pinned formula arriving from the Canisters (#08) — the knobs dress
+// themselves and the settings drawer opens so nothing happens unseen.
+watch(kilnHandoff, handoff => {
+    if (!handoff) return;
+    const knobs = kilnKnobs(handoff.recipe);
+    if (knobs.octree !== undefined) octree.value = knobs.octree;
+    if (knobs.threshold !== undefined) threshold.value = knobs.threshold;
+    if (knobs.seed !== undefined) seed.value = knobs.seed;
+    if (knobs.two_sided !== undefined) twoSided.value = knobs.two_sided;
+    if (settingsEl.value) settingsEl.value.open = true;
+    formulaNote.value = `The kiln wears “${handoff.name}” — name a subject and fire.`;
+    kilnHandoff.value = null;
+}, {immediate: true});
 
 const poller = createJobPoller({
     fetchJob: () => api<KilnJob>('/api/kiln/job'),
@@ -107,7 +125,8 @@ onUnmounted(poller.stop);
     <label class="field" for="kiln-subject">What are we firing?</label>
     <Textarea id="kiln-subject" v-model="subject" placeholder="a black omafiets leaning at a slight angle" />
     <Checkbox id="kiln-two-sided" v-model="twoSided" label="Two-sided — declare asymmetry; the room won't guess" />
-    <details class="kiln-settings">
+    <p v-show="formulaNote" class="note">{{ formulaNote }}</p>
+    <details ref="settingsEl" class="kiln-settings">
       <summary>Kiln settings · the defaults are the prop-dressing laws</summary>
       <div class="row">
         <div><label class="field" for="kiln-octree">Octree</label>

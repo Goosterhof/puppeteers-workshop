@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import {Checkbox, NumberInput, TextInput} from '@script-development/ui-inputs';
-import {onUnmounted, ref, watch} from 'vue';
+import {Checkbox, NumberInput, SingleSelect, TextInput} from '@script-development/ui-inputs';
+import {computed, onUnmounted, ref, watch} from 'vue';
 import LogWell from '../components/LogWell.vue';
 import {api} from '../composables/useBoothApi';
+import {kilnKnobs} from '../lib/pins';
+import {loadPins, pins} from '../stores/pins';
 
 interface ShiftRow {
     id: string;
@@ -24,6 +26,20 @@ const props = withDefaults(defineProps<{active?: boolean}>(), {active: false});
 const subject = ref('');
 const k = ref(1);
 const twoSided = ref(false);
+
+// The Pinboard on the call sheet (#08) — a pinned kiln formula dresses the
+// row being briefed: octree, threshold, and base seed ride along to add().
+const formulaId = ref('');
+const kilnPins = computed(() => pins.value.filter(p => p.room === 'kiln'));
+const formulaOptions = computed(() => [
+    {id: '', label: 'House defaults'},
+    ...kilnPins.value.map(p => ({id: p.id, label: p.name})),
+]);
+const formula = () => kilnPins.value.find(p => p.id === formulaId.value);
+watch(formulaId, () => {
+    const knobs = formula() && kilnKnobs(formula()!.recipe);
+    if (knobs && knobs.two_sided !== undefined) twoSided.value = knobs.two_sided;
+});
 const rows = ref<ShiftRow[]>([]);
 const running = ref(false);
 const logLines = ref<string[]>([]);
@@ -54,6 +70,7 @@ watch(() => props.active, a => {
     clearInterval(timer);
     if (!a) return;
     loadShift();
+    loadPins();
     timer = setInterval(async () => {
         try {
             renderShift(await api<ShiftList>('/api/queue/list'));
@@ -83,11 +100,15 @@ const add = () => handle(async () => {
     if (!raw) throw new Error('An order needs a subject — the kiln fires nothing from an empty phrase.');
     // both grammars: semicolons list K distinct phrases; otherwise K seed-varied takes
     const phrases = raw.split(';').map(s => s.trim()).filter(Boolean);
+    const knobs = formula() ? kilnKnobs(formula()!.recipe) : {};
     await api('/api/queue/add', {
         subject: phrases.length > 1 ? phrases : raw,
         variant_count: phrases.length > 1 ? phrases.length : (Number(k.value) || 1),
         job_type: 'kiln',
         two_sided: twoSided.value,
+        octree: knobs.octree,
+        threshold: knobs.threshold,
+        seed: knobs.seed,
     });
     subject.value = '';
 });
@@ -99,6 +120,13 @@ const add = () => handle(async () => {
       <div style="flex:3;min-width:220px">
         <label class="field" for="shift-subject">Add an order — a subject phrase</label>
         <TextInput id="shift-subject" v-model="subject" placeholder="terracotta geraniums in a weathered pot" />
+      </div>
+      <div v-if="kilnPins.length" style="max-width:200px">
+        <label class="field" for="shift-formula" title="A pinned kiln formula — its octree, threshold, and base seed dress this row">Formula</label>
+        <SingleSelect
+          id="shift-formula" v-model="formulaId" :options="formulaOptions"
+          label="label" :alphabetical-sort="false" options-label="The pinned kiln formulas"
+        />
       </div>
       <div style="max-width:90px">
         <label class="field" for="shift-k" title="K seed-varied takes of one subject, or list K phrases for K different props">K</label>
