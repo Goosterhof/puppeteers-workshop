@@ -1,5 +1,6 @@
 import {describe, expect, it} from 'vitest';
-import {APPLY_LABEL, canisterRecipe, kilnKnobs, recipeChips} from '../src/lib/pins';
+import {applyLabel, canisterRecipe, kilnKnobs, recipeChips} from '../src/lib/pins';
+import type {PinnedRecipe} from '../src/lib/pins';
 
 // The Pinboard's pure grammar (#08) — what of a take is worth repeating,
 // how a formula reads as chips, and how the kiln coerces its knobs.
@@ -57,11 +58,18 @@ describe('kilnKnobs', () => {
     });
 });
 
-describe('APPLY_LABEL', () => {
+describe('applyLabel', () => {
+    const pin = (room: PinnedRecipe['room'], recipe: PinnedRecipe['recipe']): PinnedRecipe =>
+        ({id: 'pin-1', name: 'x', room, recipe});
+
     it('should offer no replay act for foley — no panel takes those pins yet', () => {
-        expect(APPLY_LABEL.foley).toBe('');
-        expect(APPLY_LABEL.kiln).not.toBe('');
-        expect(APPLY_LABEL.stage).not.toBe('');
-        expect(APPLY_LABEL.face).not.toBe('');
+        expect(applyLabel(pin('foley', {prompt: 'rain on slate'}))).toBe('');
+        expect(applyLabel(pin('kiln', {octree: 224}))).not.toBe('');
+        expect(applyLabel(pin('stage', {steps: 4}))).not.toBe('');
+    });
+
+    it('should offer a face act only when there is a prompt to cue (PR #14 Minor 1)', () => {
+        expect(applyLabel(pin('face', {prompt: 'a brass diving helmet'}))).not.toBe('');
+        expect(applyLabel(pin('face', {seed: 7}))).toBe('');
     });
 });

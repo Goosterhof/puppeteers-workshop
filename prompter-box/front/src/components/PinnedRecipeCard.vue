@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {computed} from 'vue';
 import type {PinnedRecipe} from '../lib/pins';
-import {APPLY_LABEL, recipeChips} from '../lib/pins';
+import {applyLabel as pinApplyLabel, recipeChips} from '../lib/pins';
 import {ROOMS} from '../lib/canisters';
 
 // One named formula hanging on the Pinboard — room chip, knob chips, the
@@ -12,7 +12,7 @@ const emit = defineEmits<{apply: [pin: PinnedRecipe]; unpin: [pin: PinnedRecipe]
 
 const roomLabel = computed(() => (props.pin.room === 'kiln' ? 'Kiln' : ROOMS[props.pin.room].label));
 const chips = computed(() => recipeChips(props.pin.recipe));
-const applyLabel = computed(() => APPLY_LABEL[props.pin.room]);
+const applyLabel = computed(() => pinApplyLabel(props.pin));
 const promptLine = computed(() => (typeof props.pin.recipe.prompt === 'string' ? props.pin.recipe.prompt : ''));
 </script>
 
