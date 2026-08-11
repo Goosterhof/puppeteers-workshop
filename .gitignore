@@ -26,5 +26,6 @@ __pycache__/
 /prompter-box/kiln-output/
 /prompter-box/pack-queue/
 /prompter-box/night-shift-queue.json
+/prompter-box/pinned-recipes.json
 /prompter-box/tests/__pycache__/
 .pytest_cache/

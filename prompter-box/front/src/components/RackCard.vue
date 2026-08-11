@@ -34,6 +34,7 @@ import PottersWheel from './PottersWheel.vue';
 import {api} from '../composables/useBoothApi';
 import type {Chip} from '../lib/canisters';
 import {slugify} from '../lib/slugify';
+import {hangPin} from '../stores/pins';
 
 // One candidate on the Curing Rack — grid strip or spotlight. Judgment
 // happens here: Approve shelves, Refire re-meshes the SAME painting,
@@ -106,6 +107,30 @@ async function shelve() {
         localError.value = (e as Error).message;
     }
 }
+// The Pinboard (#08) — a firing that earned its keep promotes its settings
+// to a named formula. Bottom-up: the pin is born from THIS candidate.
+const pinRecipeName = ref('');
+const pinDone = ref(false);
+async function pinSettings() {
+    localError.value = '';
+    try {
+        await hangPin({
+            name: pinRecipeName.value,
+            room: 'kiln',
+            source: props.entry.id,
+            recipe: {
+                octree: r.value.octree,
+                threshold: r.value.threshold ?? 0.5,
+                seed: r.value.seed,
+                two_sided: r.value.two_sided ?? false,
+            },
+        });
+        pinDone.value = true;
+    } catch (e) {
+        localError.value = (e as Error).message;
+    }
+}
+
 async function refire() {
     try {
         await api('/api/rack/refire', {candidate_id: props.entry.id, octree: Number(refOctree.value), threshold: Number(refThreshold.value)});
@@ -159,6 +184,10 @@ async function refire() {
       <div class="acts">
         <button class="fire" @click="mode = 'approve'">Approve</button>
         <button class="act" @click="mode = 'refire'">Refire</button>
+        <button
+          class="act"
+          @click="pinDone = false; pinRecipeName = r.canister_label || r.subject; mode = 'pin'"
+        >Pin</button>
         <button class="act breaker" @click="emit('discard', entry)">Discard</button>
         <button v-if="onWheel" class="act" @click="emit('spotlight')">✕ Off the wheel</button>
       </div>
@@ -166,6 +195,14 @@ async function refire() {
         <TextInput :id="`pack-name-${entry.id}`" v-model="packName" :invalid="!nameOk" />
         <button class="fire" style="margin-top:0" @click="shelve">Shelve it</button>
       </div>
+      <template v-if="mode === 'pin'">
+        <div v-if="!pinDone" class="approve-row">
+          <TextInput :id="`pin-name-${entry.id}`" v-model="pinRecipeName" />
+          <button class="act" style="white-space:nowrap" @click="pinSettings">Pin it</button>
+        </div>
+        <p v-else class="qa-line">Pinned — the formula hangs on the Canisters' pinboard now.</p>
+        <p v-if="!pinDone" class="qa-line refire-note">Octree, threshold, seed — named and replayable from the Canisters, the Kiln, and the Night Shift.</p>
+      </template>
       <template v-if="mode === 'refire'">
         <div class="refire-row">
           <NumberInput :id="`refire-octree-${entry.id}`" v-model="refOctree" :step="16" title="octree" />

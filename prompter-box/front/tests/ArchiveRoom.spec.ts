@@ -2,6 +2,7 @@ import {mount} from '@vue/test-utils';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import ArchiveRoom from '../src/rooms/ArchiveRoom.vue';
 import {archive} from '../src/stores/archive';
+import {pins} from '../src/stores/pins';
 
 // Chaos #00085 detonation 3: the archive mount is a Print like every fresh
 // take — same paper, same chips, the age stamp where Fresh sits.
@@ -25,6 +26,7 @@ describe('ArchiveRoom', () => {
         apiMock.mockImplementation((path: string) => path === '/api/archive'
             ? Promise.resolve(shelves()) : Promise.reject(new Error(`no window: ${path}`)));
         archive.value = {stage: [], face: [], foley: []};
+        pins.value = [];
         Element.prototype.scrollIntoView ??= () => {};
     });
     afterEach(() => {
@@ -61,6 +63,43 @@ describe('ArchiveRoom', () => {
         expect(writeText).toHaveBeenCalledWith('the crier tolls the bell');
         expect(wrapper.find('.mount-acts .act').text()).toBe('Cue copied');
         vi.unstubAllGlobals();
+        wrapper.unmount();
+    });
+
+    it('pins a mounted recipe onto the board — settings only, no file-facts (#08)', async () => {
+        const hung = {id: 'pin-1', name: 'the crier tolls the bell', room: 'stage',
+                      recipe: {prompt: 'the crier tolls the bell', model: 'wan22-i2v-14b', seed: 7}};
+        apiMock.mockImplementation((path: string) => {
+            if (path === '/api/archive') return Promise.resolve(shelves());
+            if (path === '/api/pins/pin') return Promise.resolve({pin: hung});
+            if (path === '/api/pins') return Promise.resolve({pins: [hung]});
+            return Promise.reject(new Error(`no window: ${path}`));
+        });
+        const wrapper = mount(ArchiveRoom, {props: {active: true}});
+        await vi.advanceTimersByTimeAsync(0);
+        await wrapper.find('.canister').trigger('click');
+        await vi.advanceTimersByTimeAsync(0);
+
+        const pinAct = wrapper.findAll('.mount-acts .act').at(-1);
+        if (!pinAct) throw new Error('the Print carries no acts — the pin act never hung');
+        expect(pinAct.text()).toBe('Pin this recipe…');
+        await pinAct.trigger('click');
+        await vi.advanceTimersByTimeAsync(0);
+
+        const naming = wrapper.find('.pin-naming');
+        expect(naming.exists()).toBe(true);
+        expect((naming.find('input').element as HTMLInputElement).value).toBe('the crier tolls the bell');
+        await naming.find('button.fire').trigger('click');
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(apiMock).toHaveBeenCalledWith('/api/pins/pin', {
+            name: 'the crier tolls the bell', room: 'stage', source: 'crier-toll.mp4',
+            recipe: {prompt: 'the crier tolls the bell', model: 'wan22-i2v-14b', seed: 7},
+        });
+        const board = wrapper.find('#pinboard');
+        expect(board.exists()).toBe(true);
+        expect(board.text()).toContain('the crier tolls the bell');
+        expect(wrapper.find('.pin-naming').exists()).toBe(false);
         wrapper.unmount();
     });
 });

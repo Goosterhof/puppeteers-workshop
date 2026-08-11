@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {NumberInput, SingleSelect, Textarea} from '@script-development/ui-inputs';
-import {computed, onMounted, onUnmounted, ref, watch} from 'vue';
+import {computed, nextTick, onMounted, onUnmounted, ref, watch} from 'vue';
 import LogWell from '../components/LogWell.vue';
 import StampedMount from '../components/StampedMount.vue';
 import ThumbRow from '../components/ThumbRow.vue';
@@ -8,6 +8,7 @@ import {api} from '../composables/useBoothApi';
 import {createJobPoller} from '../composables/useJobPoller';
 import {loadArchive} from '../stores/archive';
 import {castAsLead, leadRes, loadFoleySources, openTab, pickedImage, stagePrompt} from '../stores/booth';
+import {stageHandoff} from '../stores/pins';
 import {nearestResolution, RES_PRESETS} from '../lib/resolution';
 
 interface Performer {
@@ -114,6 +115,39 @@ watch(leadRes, v => {
     resolution.value = nearestResolution(resOptions.value, v.w, v.h);
     leadRes.value = null;
 });
+
+// A pinned formula arrived from the Canisters (#08) — the performer dresses
+// first (its house defaults land on the knobs), then the pin's own knobs
+// overwrite them. Waits for the playbill if the handoff beats it in.
+function dressNumericKnobs(r: Record<string, unknown>) {
+    if (Number(r.steps)) steps.value = Number(r.steps);
+    if (r.guidance !== undefined && !Number.isNaN(Number(r.guidance))) guidance.value = Number(r.guidance);
+    if (Number(r.seed)) seed.value = Number(r.seed);
+    if (Number(r.frames)) length.value = Number(r.frames);
+}
+
+function dressWardrobe(r: Record<string, unknown>) {
+    if (typeof r.prompt === 'string') stagePrompt.value = r.prompt;
+    if (typeof r.resolution === 'string' && r.resolution) {
+        if (!resOptions.value.includes(r.resolution)) resOptions.value = [r.resolution, ...resOptions.value];
+        resolution.value = r.resolution;
+    }
+    if (Array.isArray(r.loras)) {
+        for (const g of garments.value) g.on = (r.loras as unknown[]).includes(g.name);
+    }
+}
+
+watch([stageHandoff, () => models.value.length], async ([handoff, loaded]) => {
+    if (!handoff || !loaded) return;
+    const r = handoff.recipe;
+    const m = models.value.find(x => x.type === r.model || x.name === r.model);
+    if (m) modelType.value = m.type;
+    await nextTick(); // let applyPerformer lay the performer's defaults down first
+    dressNumericKnobs(r);
+    dressWardrobe(r);
+    note.value = `Wearing “${handoff.name}” — the pinned formula dressed the knobs.`;
+    stageHandoff.value = null;
+}, {immediate: true});
 
 async function loadModels() {
     try {

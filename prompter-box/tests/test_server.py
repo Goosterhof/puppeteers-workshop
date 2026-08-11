@@ -336,3 +336,41 @@ class TestTheCallboardTruth:
         monkeypatch.setattr(server, "http_json", fake_comfy(stats=None))
         _, body = booth("GET", "/api/status")
         assert body["gpu"] is None
+
+
+class TestThePinboardWindows:
+    """#08 — the Pinboard over HTTP: the same knock the front's store makes.
+    The grammar itself is specced in test_pins.py; these prove the windows
+    speak it with the right status lines."""
+
+    @pytest.fixture(autouse=True)
+    def sandboxed_board(self, booth, monkeypatch):
+        import pins
+        monkeypatch.setattr(pins, "PINS_FILE", booth.tmp / "pinned-recipes.json")
+
+    CARD = {"name": "Spoked Vehicle", "room": "kiln", "source": "kiln-test-0001",
+            "recipe": {"octree": 224, "threshold": 0.4, "seed": 7}}
+
+    def test_should_hang_a_pin_and_list_it_through_the_window(self, booth):
+        status, reply = cue(booth, "/api/pins/pin", self.CARD)
+        assert status == 200
+        assert reply["pin"]["name"] == "Spoked Vehicle"
+        status, reply = booth("GET", "/api/pins")
+        assert status == 200
+        assert [p["name"] for p in reply["pins"]] == ["Spoked Vehicle"]
+
+    def test_should_voice_a_grammar_refusal_as_a_400(self, booth):
+        status, reply = cue(booth, "/api/pins/pin", {**self.CARD, "name": " "})
+        assert status == 400
+        assert "name the pin" in reply["error"]
+
+    def test_should_404_an_unpin_of_a_ghost(self, booth):
+        status, reply = cue(booth, "/api/pins/unpin", {"pin_id": "pin-deadbeef"})
+        assert status == 404
+        assert "already be unpinned" in reply["error"]
+
+    def test_should_unpin_through_the_window(self, booth):
+        _, reply = cue(booth, "/api/pins/pin", self.CARD)
+        status, _ = cue(booth, "/api/pins/unpin", {"pin_id": reply["pin"]["id"]})
+        assert status == 200
+        assert booth("GET", "/api/pins")[1]["pins"] == []

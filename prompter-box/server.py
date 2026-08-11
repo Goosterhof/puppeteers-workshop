@@ -73,6 +73,7 @@ from promptsmith import DEFAULT_MODEL, FORGE_PROFILES, VISION_MODEL, forge  # no
 
 import kiln  # noqa: E402  — the firing chain + the Curing Rack's tray
 import night_shift  # noqa: E402  — the overnight call sheet (blueprint file: night_shift.py)
+import pins  # noqa: E402  — the Pinboard: named recipes promoted from proven takes (#08)
 from turntable import turntable_qa  # noqa: E402  — one instrument, two consumers
 
 # The house lead — the arc-proven Wan 2.2 i2v Enhanced Lightning recipe
@@ -618,6 +619,8 @@ class BoothWindow(BaseHTTPRequestHandler):
             return self.api_queue_list()
         if path == "/api/archive":
             return self.api_archive()
+        if path == "/api/pins":
+            return self.reply({"pins": pins.load_pins()})
         if path == "/api/footage":
             return self.api_footage()
         if path == "/api/stage/job":
@@ -660,6 +663,8 @@ class BoothWindow(BaseHTTPRequestHandler):
             "/api/queue/reorder": self.api_queue_reorder,
             "/api/queue/start": self.api_queue_start,
             "/api/queue/stop": self.api_queue_stop,
+            "/api/pins/pin": self.api_pins_pin,
+            "/api/pins/unpin": self.api_pins_unpin,
         }.get(self.path)
         if not route:
             return self.fail("The booth has no such window.", 404)
@@ -1265,6 +1270,20 @@ class BoothWindow(BaseHTTPRequestHandler):
                                     p.get("direction") or "up")
             self.reply({"rows": night_shift.load_queue()})
         except night_shift.CallSheetError as e:
+            self.fail(str(e), 404)
+
+    def api_pins_pin(self, p):
+        """The Pinboard (#08) — promote a proven take's settings to a named formula."""
+        try:
+            self.reply({"pin": pins.pin_recipe(p.get("pin") or p)})
+        except pins.PinboardError as e:
+            self.fail(str(e))
+
+    def api_pins_unpin(self, p):
+        try:
+            pins.unpin_recipe((p.get("pin_id") or "").strip())
+            self.reply({"unpinned": p.get("pin_id")})
+        except pins.PinboardError as e:
             self.fail(str(e), 404)
 
     def api_queue_start(self, _p):
