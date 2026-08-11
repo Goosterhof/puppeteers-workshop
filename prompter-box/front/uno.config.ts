@@ -88,8 +88,11 @@ export default defineConfig({
           line-height: 1.5;
           overflow: hidden; /* the page never scrolls — the folio does (#00064 Phase B) */
         }
-        /* the amber wash while a take runs — the mutex felt page-wide */
-        body.take-running { background-image: radial-gradient(ellipse 900px 340px at 50% -80px, rgba(232,176,74,.24), transparent 70%); }
+        /* the take-running class still rides <body> — the VRAM mutex is a global fact,
+           not a room's — but the heat it carries is NOT painted here. A body
+           wash cannot be seen: .deck/.folio-page, .rail and .pit tile 100% of
+           #app with opaque grounds and no gap. The rule now hangs on the active
+           dog-ear, in App.vue's shell CSS (chaos #00109 D1/D2). */
 
         /* ---- shared booth grammar: panels, fields, pills, the fire button ---- */
         .panel { background: var(--drape); border: 1px solid var(--drape-edge); border-radius: 3px; padding: 22px; }
