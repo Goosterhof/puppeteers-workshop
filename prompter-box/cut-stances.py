@@ -1,19 +1,26 @@
 #!/usr/bin/env python
-"""The stance cutter — cut N idle stances from a green-ground i2v take.
+"""The stance cutter — cut N idle stances from a chroma-ground i2v take.
 
 The Bull's recipe (the Parlour e8 furniture arc, 2026-08-02), graduated
 from the session scratchpad: extract frames, compute motion energy, pick
 the stillest frame in each of N beat windows (the base stance comes from
 the take's own EARLY frames — the seam law), key each against the Kiln's
-quadratic green-gradient model, despill (strong gate + 3 px edge band),
+quadratic gradient model, despill (strong gate + 3 px edge band),
 register by foot centroid with a zero-fill shift (never np.roll — a
 wrapped column plants a foot on the far side of the frame), and
 union-crop the set with a +6 px pad so every stance shares one canvas.
 
+The FAMILY picks the ground: green (default, the Bull's own) or magenta —
+the character key law (a green-skinned or green-glowing subject dissolves
+on green and fires on magenta; the mean-orc idle set, 2026-08-13, was the
+magenta family's first take). Magenta rides the Kiln's dominance rescue:
+i2v darkens its corners beyond the gradient fit, but the vignette stays
+key-dominant and keys on that instead.
+
 i2v output carries no Klein vignette, so frames key through
 kiln.key_prop_pixels directly — the path half's 14 px crop never runs.
 
-Usage: cut-stances.py TAKE.mp4 OUTDIR PREFIX [N]
+Usage: cut-stances.py TAKE.mp4 OUTDIR PREFIX [N] [green|magenta]
 Emits OUTDIR/PREFIX-i{0..N-1}.png  (N defaults to 5)
 
 Run with a machine venv's python (numpy + PIL + scipy — the Keymaster's
@@ -33,10 +40,14 @@ FFMPEG = str(Path.home() / ".local/bin/ffmpeg")
 PAD = 6  # the same +6 px law the Kiln's alpha-bbox crop carries
 
 
-def key_frame(rgb):
-    """Quadratic-gradient key + green despill, straight from the Kiln's laws."""
-    rgba = kiln.key_prop_pixels(rgb)
-    rgba[..., :3] = kiln.despill_green_gate(rgba[..., :3], rgba[..., 3])
+def key_frame(rgb, family="green"):
+    """Quadratic-gradient key + the family's despill, straight from the
+    Kiln's laws. i2v frames always want the despill edge band."""
+    rgba = kiln.key_prop_pixels(rgb, family=family)
+    if family == "magenta":
+        rgba[..., :3] = kiln.despill_magenta_gate(rgba[..., :3], rgba[..., 3])
+    else:
+        rgba[..., :3] = kiln.despill_green_gate(rgba[..., :3], rgba[..., 3])
     return rgba
 
 
@@ -59,7 +70,7 @@ def shift_zero_fill(rgba, dx):
     return moved
 
 
-def cut_stances(mp4, outdir, prefix, n_stances=5):
+def cut_stances(mp4, outdir, prefix, n_stances=5, family="green"):
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as td:
@@ -75,8 +86,9 @@ def cut_stances(mp4, outdir, prefix, n_stances=5):
                    for k in range(n_stances)]
         windows[0] = (1, max(int(n * 0.15), 3))  # base from the take's own early frames
         picks = [min(range(a, b), key=lambda i: energy[i]) for a, b in windows]
-        print("picked frames:", picks, "of", n)
-        keyed = [key_frame(np.asarray(Image.open(files[i]).convert("RGB")))
+        print(f"The beats chose their frames: {picks} of {n} — "
+              "stillest in each window, the base from the take's own opening.")
+        keyed = [key_frame(np.asarray(Image.open(files[i]).convert("RGB")), family)
                  for i in picks]
     ref = foot_centroid(keyed[0])
     shifted = [keyed[0]] + [
@@ -89,14 +101,16 @@ def cut_stances(mp4, outdir, prefix, n_stances=5):
     x0, x1 = max(xs.min() - PAD, 0), xs.max() + PAD + 1
     for i, k in enumerate(shifted):
         Image.fromarray(k[y0:y1, x0:x1]).save(outdir / f"{prefix}-i{i}.png")
-    print("cut", prefix, f"{x1 - x0}x{y1 - y0}")
+    print(f"{n_stances} stances share one canvas: {prefix}-i0..{n_stances - 1} "
+          f"at {x1 - x0}x{y1 - y0}, feet registered, {family} ground cut away.")
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 4:
-        sys.exit("Usage: cut-stances.py TAKE.mp4 OUTDIR PREFIX [N]")
+        sys.exit("Usage: cut-stances.py TAKE.mp4 OUTDIR PREFIX [N] [green|magenta]")
+    n = int(sys.argv[4]) if len(sys.argv) > 4 else 5
+    fam = sys.argv[5] if len(sys.argv) > 5 else "green"
     try:
-        cut_stances(sys.argv[1], sys.argv[2], sys.argv[3],
-                    int(sys.argv[4]) if len(sys.argv) > 4 else 5)
+        cut_stances(sys.argv[1], sys.argv[2], sys.argv[3], n, fam)
     except kiln.KilnRefusal as refusal:
         sys.exit(f"REFUSED: {refusal}")
