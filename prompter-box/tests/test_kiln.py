@@ -469,3 +469,140 @@ class TestPropShelf:
 
     def test_should_read_an_empty_shelf_without_a_queue_dir(self, kiln_sandbox):
         assert kiln.shelf_list() == []
+
+
+def magenta_gradient_fixture(path, size=200, box=(60, 60, 140, 140),
+                             pocket=(95, 95, 105, 105), subject=(100, 120, 60),
+                             corner_shade=0.0, i2v=False):
+    """The magenta family's stand-ins (the mean-orc arc, 2026-08-13): an
+    olive-green subject block (the orc's own family — it must never key on
+    a magenta ground) and a small enclosed pocket of ground, on one of two
+    grounds. Default: the Krea STILL — a steep key-magenta gradient (the
+    furniture law's quadratic fit earns its keep). i2v=True: the TAKE —
+    near-flat bright magenta the way the i2v repaints it, where a sharp
+    darkened corner patch (corner_shade) is an outlier the ring pre-trim
+    can drop, exactly the shape of the take that forced the dominance
+    rescue. On the steep gradient the same patch hides INSIDE the fit's
+    inflated tolerance, which is why the vignette tests ride i2v=True."""
+    yy, xx = np.mgrid[0:size, 0:size].astype(np.float32)
+    rgb = np.zeros((size, size, 3), dtype=np.uint8)
+    if i2v:
+        rgb[..., 0] = (208 + 8 * xx / size).astype(np.uint8)
+        rgb[..., 1] = (22 + 6 * (xx + yy) / (2 * size)).astype(np.uint8)
+        rgb[..., 2] = (196 + 6 * yy / size).astype(np.uint8)
+    else:
+        rgb[..., 0] = (200 + 40 * xx / size).astype(np.uint8)
+        rgb[..., 1] = (20 + 20 * (xx + yy) / (2 * size)).astype(np.uint8)
+        rgb[..., 2] = (190 + 30 * yy / size).astype(np.uint8)
+    ground = rgb.copy()
+    x0, y0, x1, y1 = box
+    rgb[y0:y1, x0:x1] = subject
+    px0, py0, px1, py1 = pocket
+    rgb[py0:py1, px0:px1] = ground[py0:py1, px0:px1]
+    if corner_shade:
+        # the real wound was a SHARP few-px TOP-LEFT CORNER patch — a small
+        # minority of the border ring, so the flat-median pre-trim drops it
+        # from the fit and it stands ~90 units off the honest surface. (A
+        # band or ramp spanning the ring flips the median instead and the
+        # fit follows the darkness — a different, unrelated failure.)
+        patch = (xx < 6) & (yy < 6)
+        shaded = (rgb * (1 - corner_shade)).astype(np.uint8)
+        rgb = np.where(patch[..., None], shaded, rgb)
+    Image.fromarray(rgb, "RGB").save(path)
+    return path
+
+
+class TestMagentaFamily:
+    """The character key law as machinery (the mean-orc arc, 2026-08-13): a
+    green-skinned subject dissolves on green and fires on magenta — so the
+    keyer's island gate, dominance rescue and despill all come in a magenta
+    family, behind a `family` parameter whose default leaves every recorded
+    green behaviour untouched."""
+
+    def test_should_key_a_magenta_gradient_ground_with_the_green_orc_untouched(self, tmp_path):
+        painting = magenta_gradient_fixture(tmp_path / "orc.png")
+        rgba = kiln.key_prop_image(painting, family="magenta")
+        assert rgba[0].sum(axis=0)[3] == 0 and rgba[-1].sum(axis=0)[3] == 0
+        assert rgba[:, 0].sum(axis=0)[3] == 0 and rgba[:, -1].sum(axis=0)[3] == 0
+        assert rgba[60, 60, 3] == 255  # olive-green skin survives on ITS lawful ground
+
+    def test_should_key_a_small_enclosed_pocket_only_because_it_is_chroma_magenta(self, tmp_path):
+        painting = magenta_gradient_fixture(tmp_path / "pocket.png")
+        rgba = kiln.key_prop_image(painting, family="magenta")
+        assert rgba[86, 86, 3] == 0    # the ground pocket (95,95 minus the 14 px crop)
+        assert rgba[60, 60, 3] == 255  # the subject stays whole
+
+    def test_should_rescue_an_i2v_corner_vignette_on_magenta_dominance(self, tmp_path):
+        """The mean-orc idle take's refusal, as a fixture: i2v darkens its
+        corners ~30-60 distance units past the fitted surface, but the
+        pixels stay magenta-dominant — the dominance rescue keys them where
+        the gradient fit alone refuses."""
+        painting = magenta_gradient_fixture(tmp_path / "vignette.png", corner_shade=0.3, i2v=True)
+        rgb = np.asarray(Image.open(painting))
+        rgba = kiln.key_prop_pixels(rgb, family="magenta")  # the i2v path: no crop
+        assert rgba[0].sum(axis=0)[3] == 0 and rgba[-1].sum(axis=0)[3] == 0
+        assert rgba[:, 0].sum(axis=0)[3] == 0 and rgba[:, -1].sum(axis=0)[3] == 0
+        assert rgba[70, 70, 3] == 255   # the subject survives (100,100 is the pocket)
+
+    def test_should_still_refuse_the_vignette_without_the_rescue(self, tmp_path):
+        """Why the rescue exists: the same vignetted frame through the green
+        family (no rescue, wrong island gate) leaves ground clinging to the
+        border and the fail-closed contract refuses it."""
+        painting = magenta_gradient_fixture(tmp_path / "vignette-refused.png", corner_shade=0.3, i2v=True)
+        rgb = np.asarray(Image.open(painting))
+        with pytest.raises(kiln.KilnRefusal, match="border alpha"):
+            kiln.key_prop_pixels(rgb, family="green")
+
+    def test_should_fail_closed_when_the_subject_reaches_the_border(self, tmp_path):
+        img = np.zeros((100, 100, 3), dtype=np.uint8)
+        img[...] = (255, 0, 255)
+        img[0:100, 40:60] = (100, 120, 60)  # subject bleeds off both edges
+        path = tmp_path / "bleed.png"
+        Image.fromarray(img, "RGB").save(path)
+        with pytest.raises(kiln.KilnRefusal, match="border alpha"):
+            kiln.key_prop_image(path, family="magenta")
+
+    def test_should_refuse_an_unknown_family_by_name(self):
+        with pytest.raises(kiln.KilnRefusal, match="fires green or magenta"):
+            kiln.key_prop_pixels(np.zeros((50, 50, 3), dtype=np.uint8), family="cyan")
+
+    def test_should_leave_the_green_default_byte_identical(self, tmp_path):
+        """The graduation contract: family='green' IS the recorded behaviour,
+        and the default IS family='green'."""
+        painting = gradient_paint_fixture(tmp_path / "green.png")
+        a = kiln.key_prop_image(painting)
+        b = kiln.key_prop_image(painting, family="green")
+        assert np.array_equal(a, b)
+
+
+class TestDespillMagentaGate:
+    """despill_green_gate's twin: the purple gate wide, a laxer edge band for
+    the half-strength fringe, ground pixels beyond the band untouched."""
+
+    def _plate(self, color):
+        rgb = np.zeros((20, 20, 3), dtype=np.uint8)
+        rgb[...] = color
+        alpha = np.full((20, 20), 255, dtype=np.uint8)
+        return rgb, alpha
+
+    def test_should_cure_lavender_on_the_subject_via_the_purple_gate(self):
+        rgb, alpha = self._plate((120, 60, 120))
+        out = kiln.despill_magenta_gate(rgb, alpha, edge_band=0)
+        assert tuple(out[10, 10]) == (63, 60, 63)
+
+    def test_should_cure_half_strength_fringe_only_in_the_edge_band(self):
+        rgb, alpha = self._plate((120, 100, 115))  # laxer gate only
+        out = kiln.despill_magenta_gate(rgb, alpha, edge_band=3)
+        assert tuple(out[0, 0]) == (105, 100, 105)   # edge: cured toward g x 1.05
+        assert tuple(out[10, 10]) == (120, 100, 115)  # interior: untouched
+
+    def test_should_spare_terracotta_like_the_purple_gate_it_wraps(self):
+        rgb, alpha = self._plate((180, 90, 60))
+        out = kiln.despill_magenta_gate(rgb, alpha)
+        assert tuple(out[10, 10]) == (180, 90, 60)
+
+    def test_should_ignore_ground_pixels_entirely(self):
+        rgb, alpha = self._plate((120, 60, 120))
+        alpha[...] = 0
+        out = kiln.despill_magenta_gate(rgb, alpha)
+        assert tuple(out[10, 10]) == (120, 60, 120)

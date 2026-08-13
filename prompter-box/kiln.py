@@ -323,7 +323,36 @@ def _chroma_green(mean_rgb):
     return g > r + 60 and g > b + 40 and g > 150
 
 
-def key_prop_image(png_path, tolerance=KEY_TOLERANCE, min_island=KEY_MIN_ISLAND):
+def _chroma_magenta(mean_rgb):
+    """The chroma-magenta island gate — the magenta family's twin of
+    _chroma_green, born with the character key law (a green-skinned or
+    green-glowing subject dissolves on green and fires on magenta; the
+    mean-orc arc, 2026-08-13). Key-magenta pockets qualify; nothing on a
+    lawful subject does."""
+    r, g, b = float(mean_rgb[0]), float(mean_rgb[1]), float(mean_rgb[2])
+    return r > g + 60 and b > g + 40 and r > 150
+
+
+_ISLAND_GATES = {"green": _chroma_green, "magenta": _chroma_magenta}
+
+
+def _dominance_rescue(rgb, family):
+    """The ground-shadow law, per family: i2v repaints its ground each frame
+    and darkens corners and shadows beyond what the quadratic surface fit
+    can absorb (~40 distance units on the mean-orc idle take) — but those
+    pixels stay unambiguously key-dominant. They join the candidate mask on
+    dominance so the border refusal keeps guarding honest work. The green
+    family has never needed it (its takes keyed on the fit alone), so green
+    returns no rescue and the recorded behaviour is unchanged."""
+    if family != "magenta":
+        return None
+    r = rgb[..., 0].astype(np.int16)
+    g = rgb[..., 1].astype(np.int16)
+    b = rgb[..., 2].astype(np.int16)
+    return (r > g + 60) & (b > g + 40) & (np.minimum(r, b) > 120)
+
+
+def key_prop_image(png_path, tolerance=KEY_TOLERANCE, min_island=KEY_MIN_ISLAND, family="green"):
     """The Keymaster's border-connected topology gate, adapted to a still:
     only regions that touch the frame border (or enclosed pockets that are
     min_island-large or chroma-green) are keyed, so a subject's face can
@@ -345,16 +374,28 @@ def key_prop_image(png_path, tolerance=KEY_TOLERANCE, min_island=KEY_MIN_ISLAND)
     rgb = np.asarray(Image.open(png_path).convert("RGB"))
     if min(rgb.shape[:2]) > 4 * VIGNETTE_CROP:
         rgb = rgb[VIGNETTE_CROP:-VIGNETTE_CROP, VIGNETTE_CROP:-VIGNETTE_CROP]
-    return key_prop_pixels(rgb, tolerance=tolerance, min_island=min_island)
+    return key_prop_pixels(rgb, tolerance=tolerance, min_island=min_island, family=family)
 
 
-def key_prop_pixels(rgb, tolerance=KEY_TOLERANCE, min_island=KEY_MIN_ISLAND):
+def key_prop_pixels(rgb, tolerance=KEY_TOLERANCE, min_island=KEY_MIN_ISLAND, family="green"):
     """The array half of key_prop_image, for callers whose frames carry no
-    Klein vignette (i2v output — the stance cutter keys those directly)."""
+    Klein vignette (i2v output — the stance cutter keys those directly).
+
+    `family` picks the key colour: "green" (default, every recorded
+    behaviour unchanged) or "magenta" (the character key law). The family
+    sets the enclosed-island chroma gate and, for magenta, folds the
+    dominance rescue into the candidate mask (see _dominance_rescue)."""
+    if family not in _ISLAND_GATES:
+        raise KilnRefusal(
+            f"Unknown key family '{family}' — the kiln fires green or magenta grounds, nothing else."
+        )
     bgmap, ring_res = fit_background_gradient(rgb)
     dist = np.sqrt(((rgb.astype(np.float32) - bgmap) ** 2).sum(axis=2))
     tol = max(float(tolerance), float(np.percentile(ring_res, 99.9)) * 1.6)
     candidate = dist < tol
+    rescue = _dominance_rescue(rgb, family)
+    if rescue is not None:
+        candidate |= rescue
     labels, count = ndimage.label(candidate)
     if count:
         border_labels = np.unique(np.concatenate([
@@ -365,7 +406,7 @@ def key_prop_pixels(rgb, tolerance=KEY_TOLERANCE, min_island=KEY_MIN_ISLAND):
             if keep[lab]:
                 continue
             mask = labels == lab
-            if int(mask.sum()) >= min_island or _chroma_green(rgb[mask].mean(axis=0)):
+            if int(mask.sum()) >= min_island or _ISLAND_GATES[family](rgb[mask].mean(axis=0)):
                 keep[lab] = True
         keep[0] = False
         keyed = keep[labels]
@@ -421,6 +462,28 @@ def despill_green_gate(rgb, alpha, edge_band=3):
         egate = edge & (g > r + 25) & (g > b + 25)
         ecure = np.maximum(r, b).astype(rgb.dtype)
         out[..., 1][egate] = ecure[egate]
+    return out
+
+
+def despill_magenta_gate(rgb, alpha, edge_band=3):
+    """The magenta-ground despill law — despill_green_gate's twin. The wide
+    gate is despill_purple_gate verbatim (it already spares terracotta,
+    wicker, red blooms and blue coats); a laxer edge band catches the
+    half-strength fringe that hugs the silhouette, cured toward green the
+    same way the purple gate cures. Pass edge_band=0 for stills off a
+    clean gradient; i2v frames always want the band."""
+    subject3 = (alpha > 0)[..., None]
+    out = np.where(subject3, despill_purple_gate(rgb), rgb)
+    if edge_band:
+        r = out[..., 0].astype(np.int16)
+        g = out[..., 1].astype(np.int16)
+        b = out[..., 2].astype(np.int16)
+        subject = alpha > 0
+        edge = subject & ~ndimage.binary_erosion(subject, iterations=edge_band)
+        egate = edge & (r > g + 10) & (b > g + 10)
+        cure = np.clip(np.rint(g.astype(np.float32) * 1.05), 0, 255).astype(out.dtype)
+        out[..., 0][egate] = cure[egate]
+        out[..., 2][egate] = cure[egate]
     return out
 
 

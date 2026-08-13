@@ -330,7 +330,12 @@ shared-libs substrate is not needed here).
 Four chair firings and two table firings for the Parlour's fixed room extended
 the kiln recipe with five laws. Canonical write-up: the lab archive's
 `ai-video-generation.md` §Furniture Laws; the instrument side lives in this
-repo (`prompter-box/kiln.py`, `cut-stances.py`, `key-back.py`).
+repo (`prompter-box/kiln.py`, `cut-stances.py`, `key-back.py`). Both CLIs
+take a trailing `[green|magenta]` family arg — magenta is the character key
+law's ground (a green-skinned or green-glowing subject dissolves on green;
+the mean-orc plates, 2026-08-13), and its keyer folds a dominance rescue
+into the candidate mask for the sharp corner vignettes i2v paints outside
+the gradient fit's reach.
 
 1. **Hunyuan cannot hold an open-air table.** A tabletop on slender legs lost
    its legs to voxelization at octree 224 AND 320 — two failures at both
