@@ -374,3 +374,103 @@ class TestThePinboardWindows:
         status, _ = cue(booth, "/api/pins/unpin", {"pin_id": reply["pin"]["id"]})
         assert status == 200
         assert booth("GET", "/api/pins")[1]["pins"] == []
+
+
+class TestBringYourOwnStill:
+    """The shelf's own stage door — a still from the browser lands in
+    footage/ through the SAME JSON door as every other cue, identified by
+    its bytes, named safely, never overwriting what already hangs there."""
+
+    PNG = b"\x89PNG\r\n\x1a\n" + b"a sitter the investor brought"
+    JPG = b"\xff\xd8\xff\xe0" + b"a jpeg sitter"
+    WEBP = b"RIFF\x10\x00\x00\x00WEBPVP8 " + b"a webp sitter"
+
+    @staticmethod
+    def b64(data):
+        import base64
+        return base64.b64encode(data).decode()
+
+    def test_should_shelve_a_png_and_list_it_on_the_footage_shelf(self, booth):
+        status, body = cue(booth, "/api/footage/upload",
+                           {"name": "my-sitter.png", "data": self.b64(self.PNG)})
+        assert status == 200
+        assert body == {"shelved": "my-sitter.png", "bytes": len(self.PNG)}
+        assert (booth.rooms["footage"] / "my-sitter.png").read_bytes() == self.PNG
+        _, listing = booth("GET", "/api/footage")
+        assert "my-sitter.png" in listing["images"]
+
+    def test_should_read_a_data_url_the_way_a_filereader_hands_it_over(self, booth):
+        status, body = cue(booth, "/api/footage/upload",
+                           {"name": "reader.png", "data": f"data:image/png;base64,{self.b64(self.PNG)}"})
+        assert status == 200
+        assert body["shelved"] == "reader.png"
+
+    @pytest.mark.parametrize("claimed,data,expected", [
+        ("photo.jpeg", JPG, "photo.jpg"),
+        ("photo.webp", WEBP, "photo.webp"),
+        ("lying.png", JPG, "lying.jpg"),  # the bytes name the extension, not the browser
+    ])
+    def test_should_name_the_still_by_what_its_bytes_are(self, booth, claimed, data, expected):
+        status, body = cue(booth, "/api/footage/upload", {"name": claimed, "data": self.b64(data)})
+        assert status == 200
+        assert body["shelved"] == expected
+
+    def test_should_flatten_a_name_that_tries_to_climb_out_of_the_shelf(self, booth):
+        status, body = cue(booth, "/api/footage/upload",
+                           {"name": "../../outside.png", "data": self.b64(self.PNG)})
+        assert status == 200
+        assert body["shelved"] == "outside.png"
+        assert (booth.rooms["footage"] / "outside.png").exists()
+        assert booth.tmp.joinpath("outside.png").read_bytes() == b"\x89PNG the neighbour's business"
+
+    def test_should_tame_a_wild_name_and_fall_back_to_still_when_nothing_is_left(self, booth):
+        status, body = cue(booth, "/api/footage/upload",
+                           {"name": "C:\\Users\\me\\my photo (1)!.PNG", "data": self.b64(self.PNG)})
+        assert status == 200
+        assert body["shelved"] == "my-photo-1.png"
+        status, body = cue(booth, "/api/footage/upload", {"name": "???", "data": self.b64(self.PNG)})
+        assert body["shelved"] == "still.png"
+
+    def test_should_never_overwrite_a_still_that_already_hangs_there(self, booth):
+        status, body = cue(booth, "/api/footage/upload",
+                           {"name": "crier.png", "data": self.b64(self.PNG)})
+        assert status == 200
+        assert body["shelved"] == "crier-2.png"
+        assert (booth.rooms["footage"] / "crier.png").read_bytes() == b"\x89PNG a face the booth guards"
+        _, body = cue(booth, "/api/footage/upload", {"name": "crier.png", "data": self.b64(self.PNG)})
+        assert body["shelved"] == "crier-3.png"
+
+    def test_should_refuse_a_file_that_is_not_a_still(self, booth):
+        status, body = cue(booth, "/api/footage/upload",
+                           {"name": "page.png", "data": self.b64(b"<html>not a still</html>")})
+        assert status == 415
+        assert "PNG, JPEG, or WebP" in body["error"]
+        assert not (booth.rooms["footage"] / "page.png").exists()
+
+    def test_should_refuse_an_empty_or_garbled_upload(self, booth):
+        status, body = cue(booth, "/api/footage/upload", {"name": "void.png", "data": ""})
+        assert status == 400
+        assert "Nothing arrived" in body["error"]
+        status, body = cue(booth, "/api/footage/upload", {"name": "void.png", "data": "not base64!!"})
+        assert status == 400
+        assert "garbled" in body["error"]
+
+    def test_should_refuse_a_still_heavier_than_the_shelf_can_hold(self, booth, monkeypatch):
+        monkeypatch.setattr(server, "STILL_CEILING_BYTES", 16)
+        status, body = cue(booth, "/api/footage/upload",
+                           {"name": "heavy.png", "data": self.b64(self.PNG)})
+        assert status == 413
+        assert "shelf takes up to" in body["error"]
+
+    def test_should_leave_no_torn_still_behind(self, booth):
+        cue(booth, "/api/footage/upload", {"name": "whole.png", "data": self.b64(self.PNG)})
+        assert [p.name for p in booth.rooms["footage"].glob(".*.part")] == []
+
+    def test_should_walk_through_the_same_stage_door_as_every_other_cue(self, booth):
+        status, _ = cue(booth, "/api/footage/upload",
+                        {"name": "x.png", "data": self.b64(self.PNG)}, origin="http://evil.example")
+        assert status == 403
+        status, _ = cue(booth, "/api/footage/upload",
+                        {"name": "x.png", "data": self.b64(self.PNG)}, ctype="text/plain")
+        assert status == 415
+        assert not (booth.rooms["footage"] / "x.png").exists()

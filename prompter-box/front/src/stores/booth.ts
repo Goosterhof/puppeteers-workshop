@@ -1,5 +1,6 @@
 import {ref} from 'vue';
 import {api} from '../composables/useBoothApi';
+import {readStill} from '../lib/still';
 
 // The booth's shared state — the module-global era's cross-room wires
 // (forgeLead, pickedImage, faceSitter, the footage shelf, tab navigation)
@@ -42,6 +43,15 @@ export async function loadFoleySources(preselect?: string) {
     const {footage: reels, stage} = foleySources.value;
     const known = [...stage.map(n => `stage:${n}`), ...reels.map(n => `footage:${n}`)];
     foleyReel.value = known.includes(keep) ? keep : '';
+}
+
+// Bring your own still: shelve a browser-side file into footage/ and
+// return the name it earned there (the server sniffs the bytes and dodges
+// collisions, so the name that comes back is the one to pick, not file.name).
+export async function shelveStill(file: File): Promise<string> {
+    const {shelved} = await api<{shelved: string}>('/api/footage/upload', await readStill(file));
+    await loadFootage();
+    return shelved;
 }
 
 // Cast a still into footage/ and make it the standing lead everywhere.
