@@ -248,6 +248,44 @@ never scrolls — the folio does.
   not. The file is unlinked for good (no sidecars touched), the shelves
   re-read (`/api/archive`, or `/api/footage` for a still), and the room
   that mounted it drops the print (`binned` event).
+- **The Light Table** (2026-08-23) — the Canisters stopped being a wall of
+  prints you walk past and became a bench you work at, ruled from the
+  Artisan's three-direction audit (A, kinship). Two columns inside the
+  panel under a sticky shelf head (search + pills + count): left **the
+  bench**, the stamped mount at its true 760px, `position: sticky` — no
+  nested scroll container, no height plumbing — in a faint `--page` →
+  ink-tinted wash; right **the shelf**, 4 cards at 1400 (5 below 1180,
+  where the split folds and the print turns landscape through a
+  `.bench-narrow` scope the ROOM applies, StampedMount's markup
+  untouched). A single ink hairline divides them.
+- **R0, the law the room exists for** — *mounting a canister may never
+  scroll the deck.* `view.scrollIntoView` in `mountCanister` was the
+  defect and is deleted; the sticky head reaches up through the deck's
+  own `--deck-pad-top` gutter so no sliver of moving cards rides over
+  it. Probed live at 193 canisters: deck `scrollTop` 3000 → 3000 on a
+  mount, and 3000 → 3060 with the call deliberately re-added.
+- **After a bin, the shelf hands over the next print** — the mount reloads
+  the shelves itself and then emits `binned`, so the room mounts
+  `items[lastIndex]` (the canister that slid into the gap — DOWN the
+  shelf, toward what has not been looked at), falling back to
+  `items[lastIndex - 1]` at the end and emptying the bench on a bare
+  shelf. The deck does not move. The only new motion in the room is the
+  shelf closing that gap (150ms, reduced-motion gated).
+- **The keyboard is the instrument** — ←/↑ ←→ →/↓ walk the FILTERED list
+  order without wrapping, Home/End jump the ends, Enter/Space mounts the
+  focused card, Delete/Backspace opens the mount's own bin dialog, Esc
+  puts the print down (inside the search box it clears the text first),
+  `/` calls the search field back. Every binding but Esc is inert while
+  focus is in a text field. The walk is the one place a scroll is legal —
+  `focus({preventScroll: true})` then `scrollIntoView({block: 'nearest'})`
+  on the CARD — and it is legal only because the bench is sticky.
+- **The shelf card sheds its chip strip** — frame (16:9), one line of
+  title, room chip; the full manifest lives on the always-visible print.
+  Cards carry `content-visibility: auto` with a MEASURED
+  `contain-intrinsic-size` (129px wide / 148px below 1180 — measure a
+  rendered card if the card changes, or the scrollbar jumps), and a reel
+  asks for no metadata at all until an IntersectionObserver says it is
+  near the viewport. Grid height at 1680: 12,086px → 6,936px.
 - **The Canisters** (2026-07-18) — the dedicated archive tab. Every
   previous take, painting, and score served straight off the output dirs
   (`/api/archive`, newest first, 150 per room) as **labeled cards**: the
