@@ -57,11 +57,13 @@ describe('ArchiveRoom', () => {
 
         const writeText = vi.fn<(text: string) => void>();
         vi.stubGlobal('navigator', {clipboard: {writeText}});
-        const act = wrapper.find('.mount-acts .act');
-        expect(act.text()).toBe('Copy the cue');
+        // the mount's own take-home pair (Download, Copy image) comes first; the room's act follows
+        const act = wrapper.findAll('.mount-acts .act').find(n => n.text() === 'Copy the cue');
+        expect(act).toBeDefined();
+        if (!act) return;
         await act.trigger('click');
         expect(writeText).toHaveBeenCalledWith('the crier tolls the bell');
-        expect(wrapper.find('.mount-acts .act').text()).toBe('Cue copied');
+        expect(act.text()).toBe('Cue copied');
         vi.unstubAllGlobals();
         wrapper.unmount();
     });
