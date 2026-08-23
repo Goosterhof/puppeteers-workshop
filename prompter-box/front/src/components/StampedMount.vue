@@ -16,6 +16,7 @@ export interface MountAct {
 import {computed, reactive, ref} from 'vue';
 import type {CanisterMeta, RoomName, ShelfItem} from '../lib/canisters';
 import {canisterChips} from '../lib/canisters';
+import {clipboardTakesImages, copyImageToClipboard, downloadName} from '../lib/take-home';
 
 // The stamped mount ("The Print") — a fresh take framed like a developed
 // print, any room, any kind. Acts are [{label, run}]; run receives
@@ -44,6 +45,27 @@ const runAct = (act: MountAct) => act.run({
     },
     el: fig.value,
 });
+
+// Take it home (2026-08-23): every mount carries its own way out of the
+// booth — a download that lands in the browser's Downloads, and for images a
+// clipboard copy. The take already lives on the bench's disk, but a WSL path
+// is not a place the investor wants to go digging.
+const filename = computed(() => downloadName(props.url));
+const canCopy = computed(() => props.kind === 'image' && clipboardTakesImages());
+const copyLabel = ref('Copy image');
+let copyTimer: ReturnType<typeof setTimeout> | undefined;
+async function copyTake() {
+    clearTimeout(copyTimer);
+    try {
+        await copyImageToClipboard(props.url);
+        copyLabel.value = 'Copied — paste it anywhere';
+    } catch (e) {
+        copyLabel.value = e instanceof Error ? e.message : 'Copy failed';
+    }
+    copyTimer = setTimeout(() => {
+        copyLabel.value = 'Copy image';
+    }, 2500);
+}
 </script>
 
 <template>
@@ -59,7 +81,9 @@ const runAct = (act: MountAct) => act.run({
       <div class="mount-chips">
         <span v-for="([text, cls], i) in chips" :key="i" :class="cls">{{ text }}</span>
       </div>
-      <div v-if="actRows.length" class="mount-acts">
+      <div class="mount-acts">
+        <a class="act take-home" :href="url" :download="filename" :title="`Save ${filename} to your downloads`">Download ↓</a>
+        <button v-if="canCopy" class="act take-home" :title="`Copy ${filename} to the clipboard as PNG`" @click="copyTake">{{ copyLabel }}</button>
         <button v-for="(act, i) in actRows" :key="i" class="act" @click="runAct(act)">{{ act.label }}</button>
       </div>
     </figcaption>
@@ -72,6 +96,14 @@ const runAct = (act: MountAct) => act.run({
   background: var(--paper);
   background-image: linear-gradient(175deg, var(--paper) 82%, var(--paper-shade));
   border-radius: 3px; box-shadow: 0 4px 20px rgba(0,0,0,.5); overflow: hidden;
+}
+/* A developed print is paper in both lights. The folio remaps --paper to ink
+   (bright text becomes ink on the page), which turned the print's body dark
+   under its own ink-coloured title and act labels — so on the folio the
+   print reads the --page primitives, which never chase the remap. */
+.folio-page .mount {
+  background: var(--page);
+  background-image: linear-gradient(175deg, var(--page) 82%, var(--page-shade));
 }
 .mount-frame { position: relative; background: #0d0b08; display: flex; justify-content: center; }
 .mount-frame video, .mount-frame img { max-width: 100%; max-height: 62vh; display: block; }
@@ -94,4 +126,6 @@ const runAct = (act: MountAct) => act.run({
   padding: 6px 12px; cursor: pointer; border-radius: 2px;
 }
 .mount-acts .act:hover { border-color: var(--ink); color: var(--ink); }
+.mount-acts a.act { text-decoration: none; display: inline-block; line-height: normal; }
+.mount-acts .act.take-home { border-style: dashed; }
 </style>

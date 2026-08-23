@@ -225,6 +225,18 @@ never scrolls — the folio does.
   trip LoadImage, and refuses anything over 32 MB (413). Dropping files
   straight into `footage/` still works — the hatch is the door for the
   Windows side of the glass.
+- **Take it home** (2026-08-23) — every stamped mount (a fresh Face Shop
+  painting, a Stage take, a Foley score, a re-mounted Canister) carries
+  two dashed acts ahead of the room's own: **Download ↓** (a same-origin
+  `<a download>` named after the file — lands in the browser's Downloads,
+  byte-identical to the take on the rack) and, for images, **Copy image**
+  (fetch → PNG via canvas when needed → `navigator.clipboard.write`; the
+  button restamps "Copied — paste it anywhere" for 2.5 s, or speaks the
+  refusal when a browser keeps its clipboard shut). The take already
+  lives on the bench's disk; these are the doors out for the Windows
+  side. Folio fix that rode along: the print now reads the `--page`
+  primitives under `.folio-page` — the `--paper`→ink remap had been
+  painting the print's body dark under its own ink title and acts.
 - **The Canisters** (2026-07-18) — the dedicated archive tab. Every
   previous take, painting, and score served straight off the output dirs
   (`/api/archive`, newest first, 150 per room) as **labeled cards**: the
