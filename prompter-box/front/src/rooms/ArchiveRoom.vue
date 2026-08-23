@@ -121,6 +121,12 @@ function buildActs(it: ShelfItem): MountAct[] {
     return rows;
 }
 
+// a binned canister leaves the wall — the mount re-reads the shelves itself
+function unmountBinned() {
+    mounted.value = null;
+    pinning.value = false;
+}
+
 async function mountCanister(it: ShelfItem) {
     mounted.value = it;
     acts.value = buildActs(it);
@@ -176,6 +182,7 @@ watch(() => props.active, a => {
         :key="`${mounted.room}/${mounted.name}`"
         :room="mounted.room" :url="mountedSrc" :kind="mounted.kind || 'video'"
         :title="mountedTitle" :meta="mounted.meta" :stamp="age(mounted.mtime)" :acts="acts"
+        @binned="unmountBinned"
       />
       <div v-if="mounted && pinning" class="pin-naming">
         <label class="field" for="pin-name">Name the formula — what will you ask for again?</label>

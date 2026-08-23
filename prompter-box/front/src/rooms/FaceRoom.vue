@@ -43,6 +43,10 @@ const busy = ref(false);
 const painting = ref(false);
 const error = ref('');
 const results = ref<Painting[] | null>(null);
+// a binned take comes off the rack — the print drops with it (2026-08-23)
+const dropBinned = (url: string) => {
+    results.value = (results.value || []).filter(r => r.url !== url);
+};
 
 // In edit mode the output follows the sitter's dimensions (~1 MP).
 const pickSitter = (name: string) => {
@@ -157,6 +161,7 @@ async function cue() {
       <StampedMount
         v-for="r in results || []" :key="r.url"
         room="face" :url="r.url" kind="image" :title="r.title" :meta="r.meta" :acts="r.acts"
+        @binned="dropBinned"
       />
     </div>
   </div>

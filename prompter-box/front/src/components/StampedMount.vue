@@ -16,7 +16,11 @@ export interface MountAct {
 import {computed, reactive, ref} from 'vue';
 import type {CanisterMeta, RoomName, ShelfItem} from '../lib/canisters';
 import {canisterChips} from '../lib/canisters';
-import {clipboardTakesImages, copyImageToClipboard, downloadName} from '../lib/take-home';
+import {clipboardTakesImages, copyImageToClipboard, downloadName, takeLocation} from '../lib/take-home';
+import {api} from '../composables/useBoothApi';
+import {loadArchive} from '../stores/archive';
+import {loadFootage} from '../stores/booth';
+import TakeBin from './TakeBin.vue';
 
 // The stamped mount ("The Print") — a fresh take framed like a developed
 // print, any room, any kind. Acts are [{label, run}]; run receives
@@ -36,6 +40,7 @@ const props = withDefaults(defineProps<{
     acts: () => [],
 });
 
+const emit = defineEmits<{binned: [url: string]}>();
 const fig = ref<HTMLElement | null>(null);
 const chips = computed(() => canisterChips({room: props.room, meta: props.meta} as ShelfItem, {fresh: true}));
 const actRows = reactive(props.acts.map(a => ({...a})));
@@ -66,6 +71,34 @@ async function copyTake() {
         copyLabel.value = 'Copy image';
     }, 2500);
 }
+
+// The bin (2026-08-23): Delete rides next to Download and Copy, behind its
+// own confirm. The booth deletes the file for good; the shelves it hung on
+// are re-read so the Canisters (and the footage strip) stay true, and the
+// room that mounted it hears `binned` to drop the print.
+const where = computed(() => takeLocation(props.url));
+const bin = ref<InstanceType<typeof TakeBin> | null>(null);
+const binLabel = ref('Delete');
+const binning = ref(false);
+const askToBin = () => bin.value?.open(filename.value);
+async function binTake() {
+    const loc = where.value;
+    if (!loc || binning.value) return;
+    binning.value = true;
+    binLabel.value = 'Binning…';
+    try {
+        await api('/api/take/discard', loc);
+        await (loc.room === 'footage' ? loadFootage() : loadArchive());
+        emit('binned', props.url);
+    } catch (e) {
+        binLabel.value = e instanceof Error ? e.message : 'The bin refused it';
+        setTimeout(() => {
+            binLabel.value = 'Delete';
+        }, 3000);
+    } finally {
+        binning.value = false;
+    }
+}
 </script>
 
 <template>
@@ -84,9 +117,11 @@ async function copyTake() {
       <div class="mount-acts">
         <a class="act take-home" :href="url" :download="filename" :title="`Save ${filename} to your downloads`">Download ↓</a>
         <button v-if="canCopy" class="act take-home" :title="`Copy ${filename} to the clipboard as PNG`" @click="copyTake">{{ copyLabel }}</button>
+        <button v-if="where" class="act take-bin-act" :disabled="binning" :title="`Bin ${filename} — off the rack and off the disk, for good`" @click="askToBin">{{ binLabel }}</button>
         <button v-for="(act, i) in actRows" :key="i" class="act" @click="runAct(act)">{{ act.label }}</button>
       </div>
     </figcaption>
+    <TakeBin ref="bin" @bin="binTake" />
   </figure>
 </template>
 
@@ -128,4 +163,7 @@ async function copyTake() {
 .mount-acts .act:hover { border-color: var(--ink); color: var(--ink); }
 .mount-acts a.act { text-decoration: none; display: inline-block; line-height: normal; }
 .mount-acts .act.take-home { border-style: dashed; }
+.mount-acts .act.take-bin-act { border-style: dashed; border-color: #c9a39a; color: #9a5a4a; }
+.mount-acts .act.take-bin-act:hover { border-color: var(--tattered); color: var(--tattered); }
+.mount-acts .act.take-bin-act:disabled { opacity: .6; cursor: progress; }
 </style>
