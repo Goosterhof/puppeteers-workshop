@@ -9,9 +9,11 @@ and watch the results — with VRAM choreography handled for you.
 Stdlib only, same philosophy as the Promptsmith: no venv, no dependencies.
 """
 
+import base64
 import json
 import mimetypes
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -35,6 +37,43 @@ from stagehands import (  # noqa: F401  (re-exported names other rooms rely on)
 
 STATIC = Path(__file__).resolve().parent / "static"
 FOOTAGE = BASE / "footage"
+
+# The stage door for stills you bring yourself (bring-your-own-sitter, 2026-08-23).
+# The shelf takes the three formats every room already reads, identified by
+# the bytes and never by the name the browser claimed — a .png full of HTML is
+# refused at the door, not discovered by LoadImage.
+STILL_SIGNATURES = (
+    (b"\x89PNG\r\n\x1a\n", ".png"),
+    (b"\xff\xd8\xff", ".jpg"),
+)
+STILL_CEILING_BYTES = 32 * 1024 * 1024  # a 4K PNG is ~20 MB; a 32 MB still is not a sitter
+
+
+def sniff_still(data):
+    """The extension the bytes earn, or None when they are not a still we shelve."""
+    for magic, ext in STILL_SIGNATURES:
+        if data.startswith(magic):
+            return ext
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ".webp"
+    return None
+
+
+def shelf_name(claimed, ext):
+    """A safe, unique name on the shelf: basename only, one ASCII alphabet,
+    the extension the bytes earned, and a numbered suffix when a still of
+    that name already hangs there — the shelf never overwrites."""
+    stem = Path(claimed.replace("\\", "/")).name
+    stem = re.sub(r"\.[A-Za-z0-9]+$", "", stem)
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "-", stem).strip("-._") or "still"
+    candidate = f"{stem}{ext}"
+    n = 2
+    while (FOOTAGE / candidate).exists():
+        candidate = f"{stem}-{n}{ext}"
+        n += 1
+    return candidate
+
+
 JOBS = BASE / "jobs"
 JOB_LOGS = JOBS / "logs"
 WAN_DIR = BASE / "Wan2GP"
@@ -652,6 +691,7 @@ class BoothWindow(BaseHTTPRequestHandler):
             "/api/face/generate": self.api_face_generate,
             "/api/stage/generate": self.api_stage_generate,
             "/api/stage/cast": self.api_stage_cast,
+            "/api/footage/upload": self.api_footage_upload,
             "/api/foley/generate": self.api_foley_generate,
             "/api/kiln/generate": self.api_kiln_generate,
             "/api/rack/approve": self.api_rack_approve,
@@ -744,6 +784,41 @@ class BoothWindow(BaseHTTPRequestHandler):
     def api_footage(self):
         images = sorted(p.name for p in FOOTAGE.glob("*") if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"))
         self.reply({"images": images})
+
+    def api_footage_upload(self, p):
+        """Bring your own still — shelve an image from the browser into footage/.
+
+        The front reads the file and hands it in as base64 inside the JSON cue
+        sheet, so the upload walks through the SAME stage door as every other
+        cue (Origin + application/json): no multipart parser, no second door
+        to guard. Once shelved the still is a sitter for the Face Shop, a lead
+        for the Forge, and a start image for the Stage — one shelf, three rooms.
+        """
+        raw = (p.get("data") or "")
+        if isinstance(raw, str) and raw.startswith("data:"):
+            raw = raw.partition(",")[2]  # a data: URL — strip the header the browser adds
+        try:
+            data = base64.b64decode(raw or "", validate=True)
+        except (ValueError, TypeError):
+            return self.fail("The still arrived garbled — the booth could not read it as base64. "
+                             "Try the file again.")
+        if not data:
+            return self.fail("Nothing arrived — the upload carried no image. Pick a still and try again.")
+        if len(data) > STILL_CEILING_BYTES:
+            return self.fail(f"That still weighs {len(data) / 1e6:.0f} MB — the shelf takes up to "
+                             f"{STILL_CEILING_BYTES // (1024 * 1024)} MB. Export it smaller and bring it back.", 413)
+        ext = sniff_still(data)
+        if not ext:
+            return self.fail("The shelf takes stills only — PNG, JPEG, or WebP. That file opened as "
+                             "something else; export it as one of the three and bring it back.", 415)
+        name = shelf_name(str(p.get("name") or "still"), ext)
+        FOOTAGE.mkdir(parents=True, exist_ok=True)
+        # Land it whole or not at all: a browser that drops mid-upload must never
+        # leave a torn still that LoadImage trips over later.
+        staging = FOOTAGE / f".{name}.part"
+        staging.write_bytes(data)
+        os.replace(staging, FOOTAGE / name)
+        self.reply({"shelved": name, "bytes": len(data)})
 
     def api_forge(self, p):
         target = p.get("target")

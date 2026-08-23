@@ -212,6 +212,19 @@ never scrolls — the folio does.
   treated as ancient — `fix_settings` rewrites `video_prompt_type` to
   the model's inpaint default whose "A" then demands a mask. The booth
   stamps `settings_version: 2.66` on every cue.
+- **Bring your own still** (2026-08-23) — the footage shelf has a hatch
+  at its head in all three rooms (Forge lead, Stage start image, Face
+  Shop sitter): pick a PNG/JPEG/WebP or drop one anywhere on the strip
+  and `POST /api/footage/upload` shelves it into `footage/` and picks it
+  on arrival. The still rides as base64 INSIDE the JSON cue so it walks
+  through the same stage door (Origin + `application/json`) as every
+  other cue — no multipart parser, no second door. The server names the
+  file by its bytes, not the browser's claim (a `.png` of HTML is refused
+  415), flattens path tricks to a basename, never overwrites (`crier.png`
+  → `crier-2.png`), lands it via `os.replace` so a torn upload can never
+  trip LoadImage, and refuses anything over 32 MB (413). Dropping files
+  straight into `footage/` still works — the hatch is the door for the
+  Windows side of the glass.
 - **The Canisters** (2026-07-18) — the dedicated archive tab. Every
   previous take, painting, and score served straight off the output dirs
   (`/api/archive`, newest first, 150 per room) as **labeled cards**: the
