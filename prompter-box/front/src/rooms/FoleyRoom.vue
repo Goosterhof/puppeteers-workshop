@@ -38,6 +38,10 @@ const error = ref('');
 const logLines = ref<string[]>([]);
 const logShown = ref(false);
 const results = ref<FoleyTake[] | null>(null); // null = nothing cued yet — the empty note stands
+// a binned score comes off the rack — the print drops with it (2026-08-23)
+const dropBinned = (url: string) => {
+    results.value = (results.value || []).filter(r => r.url !== url);
+};
 
 function settle(job: FoleyJob) {
     if (job.state === 'done') {
@@ -122,6 +126,7 @@ onUnmounted(poller.stop);
       <StampedMount
         v-for="r in results || []" :key="r.url"
         room="foley" :url="r.url" :kind="r.kind" :title="r.title" :meta="r.meta"
+        @binned="dropBinned"
       />
     </div>
   </div>

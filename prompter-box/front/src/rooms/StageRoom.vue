@@ -77,6 +77,10 @@ const error = ref('');
 const logLines = ref<string[]>([]);
 const logShown = ref(false);
 const results = ref<TakeMount[] | null>(null);
+// a binned take comes off the rack — the print drops with it (2026-08-23)
+const dropBinned = (url: string) => {
+    results.value = (results.value || []).filter(r => r.url !== url);
+};
 
 const performer = () => models.value.find(m => m.type === modelType.value);
 const kind = computed(() => performer()?.kind);
@@ -328,6 +332,7 @@ onUnmounted(poller.stop);
       <StampedMount
         v-for="r in results || []" :key="r.url"
         room="stage" :url="r.url" :kind="r.kind" :title="r.title" :meta="r.meta" :acts="r.acts"
+        @binned="dropBinned"
       />
     </div>
   </div>

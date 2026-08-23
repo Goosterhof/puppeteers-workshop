@@ -237,6 +237,17 @@ never scrolls — the folio does.
   side. Folio fix that rode along: the print now reads the `--page`
   primitives under `.folio-page` — the `--paper`→ink remap had been
   painting the print's body dark under its own ink title and acts.
+- **The bin** (2026-08-23) — **Delete** rides on every stamped mount next
+  to Download and Copy image, behind its own confirm (`TakeBin.vue`: Keep
+  it / Esc keep, Bin it bins). `POST /api/take/discard {room, name}` —
+  room is one of `face` (ComfyUI/output), `stage` (Wan2GP/outputs),
+  `foley` (MMAudio/output/prompter, subdirs kept), `footage` (a shelved
+  still); the name must resolve INSIDE that room and be a file; the
+  Kiln's firings and the pack queue are refused on purpose — they die
+  through the Rack's own verdicts, which keep an audit trail the bin does
+  not. The file is unlinked for good (no sidecars touched), the shelves
+  re-read (`/api/archive`, or `/api/footage` for a still), and the room
+  that mounted it drops the print (`binned` event).
 - **The Canisters** (2026-07-18) — the dedicated archive tab. Every
   previous take, painting, and score served straight off the output dirs
   (`/api/archive`, newest first, 150 per room) as **labeled cards**: the

@@ -692,6 +692,7 @@ class BoothWindow(BaseHTTPRequestHandler):
             "/api/stage/generate": self.api_stage_generate,
             "/api/stage/cast": self.api_stage_cast,
             "/api/footage/upload": self.api_footage_upload,
+            "/api/take/discard": self.api_take_discard,
             "/api/foley/generate": self.api_foley_generate,
             "/api/kiln/generate": self.api_kiln_generate,
             "/api/rack/approve": self.api_rack_approve,
@@ -1081,6 +1082,35 @@ class BoothWindow(BaseHTTPRequestHandler):
             return self.fail("That painting is not hanging on that rack.", 404)
         shutil.copyfile(src, FOOTAGE / src.name)
         self.reply({"cast": src.name})
+
+    # The rooms a take can be binned from. The Kiln's firings and the pack
+    # queue are NOT here on purpose — they die through the Rack's own
+    # verdicts (rack_discard), which keep the audit trail this window does not.
+    def bin_rooms(self):
+        return {"face": COMFY_OUT, "stage": WAN_OUT, "foley": MM_OUT, "footage": FOOTAGE}
+
+    def api_take_discard(self, p):
+        """Bin a take — delete one file from one of the output rooms, for good.
+
+        The front asks behind a confirm dialog; the booth still guards: the
+        room must be one of the four, the name must resolve INSIDE that room,
+        and only a file goes (never a directory, never a sidecar it was not
+        asked about). Nothing comes back from the bin.
+        """
+        room = (p.get("room") or "").strip()
+        root = self.bin_rooms().get(room)
+        if root is None:
+            return self.fail(f"The bin takes nothing from '{room or 'nowhere'}' — only face, stage, "
+                             "foley, or footage takes go in.", 404)
+        name = (p.get("name") or "").strip()
+        target = (root / name).resolve() if name else None
+        if not target or not target.is_relative_to(root.resolve()) or not target.is_file():
+            return self.fail("That take is not hanging in that room — nothing to bin.", 404)
+        try:
+            target.unlink()
+        except OSError as e:
+            return self.fail(f"The bin would not take it: {e.strerror or e}. Check the bench's disk.", 500)
+        self.reply({"binned": str(target.relative_to(root.resolve())), "room": room})
 
     def api_stage_job(self):
         info = {k: v for k, v in stage_job.items() if k != "pid"}

@@ -51,3 +51,21 @@ describe('take-home', () => {
         await expect(copyImageToClipboard('/face-output/gone.png')).rejects.toThrow('(404)');
     });
 });
+
+describe('takeLocation — where a mounted take hangs, read off its URL', () => {
+    it('maps each served room to the bin room and keeps the name inside it', async () => {
+        const {takeLocation} = await import('../src/lib/take-home');
+        expect(takeLocation('/face-output/PrompterBox-001020_00001_.png')).toStrictEqual({room: 'face', name: 'PrompterBox-001020_00001_.png'});
+        expect(takeLocation('/stage-output/crier%20bell.mp4')).toStrictEqual({room: 'stage', name: 'crier bell.mp4'});
+        expect(takeLocation('/foley-output/2026-08/toll.flac?x=1')).toStrictEqual({room: 'foley', name: '2026-08/toll.flac'});
+        expect(takeLocation('/footage/sitter.png')).toStrictEqual({room: 'footage', name: 'sitter.png'});
+    });
+
+    it('refuses what the bin does not take — kiln pieces, static, foreign, or a bare room', async () => {
+        const {takeLocation} = await import('../src/lib/take-home');
+        expect(takeLocation('/kiln-output/omafiets/mesh.glb')).toBeNull();
+        expect(takeLocation('/static/index.html')).toBeNull();
+        expect(takeLocation('https://evil.example/face-output/x.png')).toBeNull();
+        expect(takeLocation('/face-output/')).toBeNull();
+    });
+});

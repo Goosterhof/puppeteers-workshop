@@ -47,3 +47,33 @@ export async function copyImageToClipboard(url: string): Promise<void> {
     const png = await asPngBlob(await res.blob());
     await navigator.clipboard.write([new ClipboardItem({'image/png': png})]);
 }
+
+// -- the bin --------------------------------------------------------------
+
+export type BinRoom = 'face' | 'stage' | 'foley' | 'footage';
+
+const ROOM_BY_PREFIX: Record<string, BinRoom> = {
+    '/face-output/': 'face',
+    '/stage-output/': 'stage',
+    '/foley-output/': 'foley',
+    '/footage/': 'footage',
+};
+
+/** Where a mounted take hangs, read off its URL — the room the bin window
+ *  takes and the name inside that room (decoded, subdirs kept for Foley).
+ *  Null for anything the bin does not take (kiln pieces, static, foreign). */
+export function takeLocation(url: string): {room: BinRoom; name: string} | null {
+    const path = url.split('?')[0] ?? '';
+    for (const [prefix, room] of Object.entries(ROOM_BY_PREFIX)) {
+        if (path.startsWith(prefix)) {
+            const rest = path.slice(prefix.length);
+            if (!rest) return null;
+            try {
+                return {room, name: decodeURIComponent(rest)};
+            } catch {
+                return {room, name: rest};
+            }
+        }
+    }
+    return null;
+}

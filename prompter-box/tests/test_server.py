@@ -474,3 +474,57 @@ class TestBringYourOwnStill:
                         {"name": "x.png", "data": self.b64(self.PNG)}, ctype="text/plain")
         assert status == 415
         assert not (booth.rooms["footage"] / "x.png").exists()
+
+
+class TestTheBin:
+    """Binning a take — one file, one room, behind the front's confirm; the
+    booth still refuses every climb, every directory, every room that keeps
+    its own audit trail."""
+
+    def test_should_bin_a_painting_from_the_face_rack(self, booth):
+        status, body = cue(booth, "/api/take/discard", {"room": "face", "name": "painting.png"})
+        assert status == 200
+        assert body == {"binned": "painting.png", "room": "face"}
+        assert not (booth.rooms["face-output"] / "painting.png").exists()
+
+    def test_should_bin_a_still_the_investor_shelved_in_footage(self, booth):
+        status, body = cue(booth, "/api/take/discard", {"room": "footage", "name": "crier.png"})
+        assert status == 200
+        assert body["binned"] == "crier.png"
+        _, listing = booth("GET", "/api/footage")
+        assert listing["images"] == []
+
+    def test_should_bin_a_foley_score_by_its_path_inside_the_room(self, booth):
+        reel = booth.rooms["foley-output"] / "2026-08" / "toll.flac"
+        reel.parent.mkdir()
+        reel.write_bytes(b"fLaC a toll")
+        status, body = cue(booth, "/api/take/discard", {"room": "foley", "name": "2026-08/toll.flac"})
+        assert status == 200
+        assert body["binned"] == "2026-08/toll.flac"
+        assert not reel.exists()
+        assert reel.parent.exists()  # only the file goes, never its room
+
+    @pytest.mark.parametrize("name", ["../outside.png", "../../outside.png", "/etc/passwd", "", "reels"])
+    def test_should_refuse_every_climb_directory_and_blank(self, booth, name):
+        (booth.rooms["footage"] / "reels").mkdir(exist_ok=True)
+        status, body = cue(booth, "/api/take/discard", {"room": "footage", "name": name})
+        assert status == 404
+        assert body["error"] == "That take is not hanging in that room — nothing to bin."
+        assert booth.tmp.joinpath("outside.png").exists()
+        assert (booth.rooms["footage"] / "crier.png").exists()
+
+    @pytest.mark.parametrize("room", ["kiln", "pack-queue", "static", "", "../footage"])
+    def test_should_refuse_rooms_that_are_not_on_the_bin_list(self, booth, room):
+        status, body = cue(booth, "/api/take/discard", {"room": room, "name": "index.html"})
+        assert status == 404
+        assert "only face, stage, foley, or footage" in body["error"]
+        assert (booth.rooms["static"] / "index.html").exists()
+
+    def test_should_walk_through_the_same_stage_door_as_every_other_cue(self, booth):
+        status, _ = cue(booth, "/api/take/discard", {"room": "face", "name": "painting.png"},
+                        origin="http://evil.example")
+        assert status == 403
+        status, _ = cue(booth, "/api/take/discard", {"room": "face", "name": "painting.png"},
+                        ctype="text/plain")
+        assert status == 415
+        assert (booth.rooms["face-output"] / "painting.png").exists()
