@@ -99,6 +99,10 @@ async function binTake() {
         binning.value = false;
     }
 }
+
+// The room may reach for the bin from the keyboard (the Light Table binds
+// Delete on the mounted print) — one door to the server, not two.
+defineExpose({askToBin});
 </script>
 
 <template>

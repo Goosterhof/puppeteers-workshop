@@ -137,7 +137,11 @@ function turnThePage(event: KeyboardEvent, from: string) {
 /* ---- The Deck: the lit prompt-book page (surface from .folio-page) ---- */
 .deck {
   grid-area: deck; position: relative; z-index: 1;
-  overflow: auto; padding: 26px 34px 40px;
+  /* the gutter is a token because a sticky room head has to reach UP through
+     it — content scrolls through a scroll container's padding, so a head
+     pinned at top:0 leaves a moving sliver above itself (the Light Table, 2026-08-23) */
+  --deck-pad-top: 26px;
+  overflow: auto; padding: var(--deck-pad-top) 34px 40px;
 }
 .deck-inner { max-width: 1400px; margin: 0 auto; }
 
@@ -194,7 +198,7 @@ body.take-running .rail .tab[aria-selected="true"] {
 
 /* ===== Responsive — the right-docked window is the design case ===== */
 @media (max-width: 1280px) {
-  .deck { padding: 22px 24px 36px; }
+  .deck { --deck-pad-top: 22px; padding: var(--deck-pad-top) 24px 36px; }
   .booth { grid-template-columns: minmax(0, 1fr) 164px; }
 }
 @media (max-width: 1000px) {
