@@ -11,7 +11,7 @@
         "lint": "oxlint",
         "test": "vitest run",
         "test:coverage": "vitest run --coverage",
-        "typecheck": "vue-tsc --noEmit"
+        "typecheck": "vue-tsc --noEmit && vue-tsc --noEmit -p tsconfig.node.json --composite false"
     },
     "dependencies": {
         "@script-development/ui-inputs": "^0.10.0",
