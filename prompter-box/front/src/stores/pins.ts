@@ -34,3 +34,6 @@ export interface PinHandoff {
 
 export const kilnHandoff = ref<PinHandoff | null>(null);
 export const stageHandoff = ref<PinHandoff | null>(null);
+
+export const faceRecipeHandoff = ref<PinHandoff | null>(null);
+export const foleyHandoff = ref<PinHandoff | null>(null);

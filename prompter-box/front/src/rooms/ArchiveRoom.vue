@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {TextInput} from '@script-development/ui-inputs';
 import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from 'vue';
+import RoomFlow from '../components/RoomFlow.vue';
 import CanisterCard from '../components/CanisterCard.vue';
 import FilterPills from '../components/FilterPills.vue';
 import PinnedRecipeCard from '../components/PinnedRecipeCard.vue';
@@ -11,8 +12,8 @@ import type {ShelfItem} from '../lib/canisters';
 import {canisterRecipe} from '../lib/pins';
 import type {PinnedRecipe} from '../lib/pins';
 import {archive, loadArchive} from '../stores/archive';
-import {castAsLead, facePrompt, leadRes, loadFoleySources, openTab} from '../stores/booth';
-import {hangPin, kilnHandoff, loadPins, pins, stageHandoff, takeDownPin} from '../stores/pins';
+import {castAsLead, leadRes, loadFoleySources, openTab, refineStill, stagePrompt, stageTaskHandoff} from '../stores/booth';
+import {faceRecipeHandoff, foleyHandoff, hangPin, kilnHandoff, loadPins, pins, stageHandoff, takeDownPin} from '../stores/pins';
 
 // The Light Table (2026-08-23) — the room stopped being a wall of prints you
 // walk past and became a bench you work at. The print lies on the bench under
@@ -108,8 +109,11 @@ function applyPin(pin: PinnedRecipe) {
         stageHandoff.value = handoff;
         openTab('stage');
     } else if (pin.room === 'face' && typeof pin.recipe.prompt === 'string') {
-        facePrompt.value = pin.recipe.prompt;
+        faceRecipeHandoff.value = handoff;
         openTab('face');
+    } else if (pin.room === 'foley' && typeof pin.recipe.prompt === 'string') {
+        foleyHandoff.value = handoff;
+        openTab('foley');
     }
 }
 
@@ -122,14 +126,24 @@ async function unpin(pin: PinnedRecipe) {
     }
 }
 
+function copyAct(it: ShelfItem): MountAct | null {
+    if (!it.meta?.prompt) return null;
+    return {label: 'Copy the cue', run: ctx => {
+        navigator.clipboard.writeText(it.meta!.prompt!);
+        ctx.relabel('Cue copied');
+    }};
+}
+function refineAct(it: ShelfItem): MountAct | null {
+    if (it.kind !== 'image' || (it.room !== 'face' && it.room !== 'stage')) return null;
+    return {label: 'Refine this character →', run: async ctx => {
+        try { await refineStill({room: it.room as 'face' | 'stage', name: it.name}, canisterRecipe(it.meta || {})); }
+        catch (e) { ctx.relabel(e instanceof Error ? e.message : 'The character could not reach the easel'); }
+    }};
+}
 function buildActs(it: ShelfItem): MountAct[] {
     const rows: MountAct[] = [];
-    if (it.meta?.prompt) {
-        rows.push({label: 'Copy the cue', run: ctx => {
-            navigator.clipboard.writeText(it.meta!.prompt!);
-            ctx.relabel('Cue copied');
-        }});
-    }
+    const cueCopy = copyAct(it);
+    if (cueCopy) rows.push(cueCopy);
     if (it.room === 'stage' && it.kind === 'video') {
         rows.push({label: 'Score it in the foley booth →', run: async () => {
             await loadFoleySources(`stage:${it.name}`);
@@ -142,9 +156,13 @@ function buildActs(it: ShelfItem): MountAct[] {
             ctx.relabel('Cast — it is in the footage now');
         }});
     }
+    const refinement = refineAct(it);
+    if (refinement) rows.push(refinement);
     if (it.room === 'face') {
         rows.push({label: 'Send to the stage →', run: async ctx => {
             await castAsLead(it.name);
+            stagePrompt.value = '';
+            stageTaskHandoff.value = 'i2v';
             const img = ctx.el?.querySelector('img');
             if (img?.naturalWidth) leadRes.value = {w: img.naturalWidth, h: img.naturalHeight};
             openTab('stage');
@@ -309,6 +327,7 @@ watch(() => props.active, a => {
 </script>
 
 <template>
+  <RoomFlow room="archive" :current="mounted ? 2 : filtered ? 1 : 0" />
   <div ref="root" class="panel light-table">
     <div ref="head" class="shelf-head">
       <div class="row">

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import {NumberInput, SingleSelect, Textarea} from '@script-development/ui-inputs';
 import {computed, onMounted, ref} from 'vue';
+import RoomFlow from '../components/RoomFlow.vue';
 import ThumbRow from '../components/ThumbRow.vue';
 import {api} from '../composables/useBoothApi';
-import {facePrompt, forgeLead, leadRes, openTab, pickedImage, stagePrompt} from '../stores/booth';
+import {facePrompt, faceSitter, forgeIdea, forgeLead, forgeTarget, leadRes, openTab, pickedImage, refineStill, stagePrompt, stageTaskHandoff} from '../stores/booth';
 
 const TARGETS = [
     {t: 'wan', label: 'Stage · motion', stamp: 'stage · motion'},
@@ -18,8 +19,8 @@ interface CueCard {
     lead: string | null;
 }
 
-const idea = ref('');
-const target = ref('wan');
+const idea = forgeIdea;
+const target = forgeTarget;
 const variants = ref(3);
 const voice = ref('');
 const voices = ref<{name: string; label: string}[]>([]);
@@ -57,6 +58,7 @@ const copyCue = (text: string) => navigator.clipboard.writeText(text);
 
 function cueStage(card: CueCard) {
     stagePrompt.value = card.text;
+    stageTaskHandoff.value = card.lead ? 'i2v' : 't2v';
     if (card.lead) {
         pickedImage.value = card.lead;
         const t = room.value?.querySelector<HTMLImageElement>(`.thumbrow img[title="${CSS.escape(card.lead)}"]`);
@@ -64,7 +66,8 @@ function cueStage(card: CueCard) {
     }
     openTab('stage');
 }
-function cueFace(card: CueCard) {
+async function cueFace(card: CueCard) {
+    if (card.lead) await refineStill({room: 'footage', name: card.lead}, {}, card.lead === faceSitter.value);
     facePrompt.value = card.text;
     openTab('face');
 }
@@ -96,6 +99,7 @@ onMounted(loadVoices);
 
 <template>
   <div ref="room">
+    <RoomFlow room="forge" :current="cards.length ? 2 : idea.trim() ? 1 : 0" />
     <div class="panel">
       <label class="field" for="idea">The rough idea</label>
       <Textarea id="idea" v-model="idea" placeholder="illustrated town crier mascot — the bell in his chest alcove swings and rings; scroll stays still…" />
@@ -120,7 +124,7 @@ onMounted(loadVoices);
           <label class="field" for="forge-model">The voice</label>
           <SingleSelect
             id="forge-model" v-model="voice"
-            :options="voiceOptions" label="label" :alphabetical-sort="false"
+            :options="voiceOptions" :label="(option: {label: string}) => option.label" :alphabetical-sort="false"
             options-label="The voices on the Ollama shelf"
           />
         </div>
@@ -135,7 +139,8 @@ onMounted(loadVoices);
       <p v-if="!cards.length" class="empty">The rack is empty — strike the forge and the cue cards deal here.</p>
       <article v-for="card in cards" :key="`${card.n}-${card.text}`" class="card">
         <div class="stamp"><span>Cue № {{ card.n }}</span><span>{{ stampFor(card) }}</span></div>
-        <p>{{ card.text }}</p>
+        <label class="field" :for="`cue-card-${card.n}`">Edit this cue before sending it</label>
+        <Textarea :id="`cue-card-${card.n}`" v-model="card.text" />
         <div class="acts">
           <button @click="copyCue(card.text)">Copy</button>
           <button v-if="card.target !== 'flux'" @click="cueStage(card)">Cue the stage →</button>

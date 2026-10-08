@@ -528,3 +528,41 @@ class TestTheBin:
                         ctype="text/plain")
         assert status == 415
         assert (booth.rooms["face-output"] / "painting.png").exists()
+
+
+class TestCharacterHandoffs:
+    def test_same_named_results_never_replace_an_existing_character(self, booth):
+        original = booth.rooms['footage'] / 'painting.png'
+        original.write_bytes(b'original character')
+        status, reply = cue(booth, '/api/stage/cast', {'image': 'painting.png'})
+        assert status == 200
+        assert reply['cast'] == 'painting-2.png'
+        assert original.read_bytes() == b'original character'
+        assert (booth.rooms['footage'] / reply['cast']).read_bytes() == b'\x89PNG a painting'
+        # Selecting the same version again reuses its complete, identical copy.
+        status, again = cue(booth, '/api/stage/cast', {'image': 'painting.png'})
+        assert status == 200
+        assert again['cast'] == reply['cast']
+        assert not list(booth.rooms['footage'].glob('*.part'))
+
+    def test_two_engines_can_hand_over_distinct_same_named_stills(self, booth):
+        (booth.rooms['stage-output'] / 'painting.png').write_bytes(b'\x89PNG the other painter')
+        _, face = cue(booth, '/api/stage/cast', {'image': 'painting.png'})
+        _, stage = cue(booth, '/api/stage/cast', {'image': 'painting.png', 'from': 'stage'})
+        assert face['cast'] != stage['cast']
+        assert (booth.rooms['footage'] / face['cast']).read_bytes() == b'\x89PNG a painting'
+        assert (booth.rooms['footage'] / stage['cast']).read_bytes() == b'\x89PNG the other painter'
+
+    def test_an_upload_cannot_overwrite_a_cast_that_wins_the_naming_race(self, booth, monkeypatch):
+        def stale_upload_name(_claimed, _ext):
+            # The upload chose this free name, but a casting request published
+            # a character before the upload could publish its own bytes.
+            assert server.shelve_cast(booth.rooms['face-output'] / 'painting.png') == 'painting.png'
+            return 'painting.png'
+        monkeypatch.setattr(server, 'shelf_name', stale_upload_name)
+        data = TestBringYourOwnStill.PNG
+        status, upload = cue(booth, '/api/footage/upload', {'name': 'painting.png', 'data': TestBringYourOwnStill.b64(data)})
+        assert status == 200
+        assert upload['shelved'] == 'painting-2.png'
+        assert (booth.rooms['footage'] / 'painting.png').read_bytes() == b'\x89PNG a painting'
+        assert (booth.rooms['footage'] / upload['shelved']).read_bytes() == data

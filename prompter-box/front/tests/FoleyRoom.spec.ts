@@ -6,6 +6,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 // as a Print.
 
 import FoleyRoom from '../src/rooms/FoleyRoom.vue';
+import {foleyHandoff} from '../src/stores/pins';
 import {foleyReel} from '../src/stores/booth';
 
 const {apiMock} = vi.hoisted(() => ({apiMock: vi.fn<(path: string, body?: unknown) => Promise<unknown>>()}));
@@ -31,6 +32,7 @@ describe('FoleyRoom', () => {
     beforeEach(() => {
         vi.useFakeTimers();
         foleyReel.value = '';
+        foleyHandoff.value = null;
         apiMock.mockReset();
         apiMock.mockImplementation(routes());
     });
@@ -103,4 +105,23 @@ describe('FoleyRoom', () => {
         expect(wrapper.find('.error').text()).toContain('The score collapsed (exit 1)');
         wrapper.unmount();
     });
+    it('refuses a score without a reel before it reaches the machine', async () => {
+        const wrapper = mount(FoleyRoom);
+        await vi.advanceTimersByTimeAsync(0);
+        await wrapper.findAll('#foley-task button').find(b => b.text() === 'Score a video')!.trigger('click');
+        await fire(wrapper);
+        expect(wrapper.find('.error').text()).toContain('Choose the reel');
+        expect(apiMock.mock.calls.some(([path]) => path === '/api/foley/generate')).toBe(false);
+        wrapper.unmount();
+    });
+    it('replays a proven sound cue with its zero seed', async () => {
+        foleyHandoff.value = {name: 'One bell', recipe: {prompt: 'a bell rings once', seed: 0}};
+        const wrapper = mount(FoleyRoom);
+        await vi.advanceTimersByTimeAsync(0);
+        await fire(wrapper);
+        expect(apiMock).toHaveBeenCalledWith('/api/foley/generate', expect.objectContaining({prompt: 'a bell rings once', seed: 0}));
+        expect(foleyHandoff.value).toBeNull();
+        wrapper.unmount();
+    });
+
 });

@@ -1,7 +1,8 @@
 import {mount} from '@vue/test-utils';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import FaceRoom from '../src/rooms/FaceRoom.vue';
-import {facePrompt, faceSitter} from '../src/stores/booth';
+import {faceRecipeHandoff} from '../src/stores/pins';
+import {faceHandoff, facePrompt, faceSitter} from '../src/stores/booth';
 
 // The Face Shop's contract (#00063 Phase 3): the sitter flips the room into
 // EDIT mode, the poll speaks 'painting', and a rejection names the brush.
@@ -29,6 +30,9 @@ const boot = async () => {
 describe('FaceRoom', () => {
     beforeEach(() => {
         vi.useFakeTimers();
+        localStorage.clear();
+        faceHandoff.value = null;
+        faceRecipeHandoff.value = null;
         apiMock.mockReset();
         apiMock.mockImplementation(routes());
         facePrompt.value = '';
@@ -99,6 +103,111 @@ describe('FaceRoom', () => {
         await vi.advanceTimersByTimeAsync(0);
 
         expect(wrapper.find('.error').text()).toContain('the broken brush:\nKSampler: out of memory');
+        wrapper.unmount();
+    });
+});
+
+// The character loop must retain the source that was actually cued, keep
+// earlier versions, and observe an interrupted job rather than firing it twice.
+describe('FaceRoom — the character refinement loop', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        localStorage.clear();
+        faceHandoff.value = null;
+        faceRecipeHandoff.value = null;
+        apiMock.mockReset();
+        apiMock.mockImplementation(routes({
+            '/api/stage/cast': {cast: 'out-2.png'},
+            '/api/footage': {images: ['crier.png', 'out-2.png']},
+        }));
+        facePrompt.value = '';
+        faceSitter.value = 'crier.png';
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it('captures the source and cue, keeps the previous painting, and can branch from the original', async () => {
+        const wrapper = await boot();
+        facePrompt.value = 'sharpen the grin';
+        await wrapper.find('#face-go').trigger('click');
+        facePrompt.value = 'a future change';
+        apiMock.mockImplementation(routes({
+            '/api/face/result/p1': {state: 'done', images: ['out.png']},
+            '/api/stage/cast': {cast: 'out-2.png'},
+            '/api/footage': {images: ['crier.png', 'out-2.png']},
+        }));
+        await vi.advanceTimersByTimeAsync(1500);
+        expect(wrapper.find('.mount-title').text()).toBe('sharpen the grin');
+        expect(wrapper.find('.comparison-reference img').attributes('src')).toBe('/footage/crier.png');
+        await wrapper.findAll('.mount-acts button').find(b => b.text() === 'Refine this version →')!.trigger('click');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(faceSitter.value).toBe('out-2.png');
+        expect(facePrompt.value).toBe('');
+        expect(wrapper.findAll('.revision-strip .revision')).toHaveLength(2);
+        await wrapper.find('.revision.original').trigger('click');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(faceSitter.value).toBe('crier.png');
+        expect(wrapper.findAll('.revision-strip .revision')).toHaveLength(2);
+        wrapper.unmount();
+    });
+
+    it('reconnects after refresh with the cued recipe and never submits a second painting', async () => {
+        let wrapper = await boot();
+        facePrompt.value = 'make the smile wicked';
+        await wrapper.find('#face-go').trigger('click');
+        await vi.advanceTimersByTimeAsync(0);
+        wrapper.unmount();
+        facePrompt.value = '';
+        faceSitter.value = null;
+        apiMock.mockClear();
+        apiMock.mockImplementation(routes({'/api/face/result/p1': {state: 'done', images: ['recovered.png']}}));
+        wrapper = await boot();
+        await vi.advanceTimersByTimeAsync(1500);
+        expect(wrapper.find('.mount-title').text()).toBe('make the smile wicked');
+        expect(wrapper.find('.comparison-reference img').attributes('src')).toBe('/footage/crier.png');
+        expect(apiMock.mock.calls.some(([path]) => path === '/api/face/generate')).toBe(false);
+        wrapper.unmount();
+    });
+
+    it('a failed second refinement leaves the successful first version on the bench', async () => {
+        const wrapper = await boot();
+        facePrompt.value = 'first change';
+        await wrapper.find('#face-go').trigger('click');
+        apiMock.mockImplementation(routes({'/api/face/result/p1': {state: 'done', images: ['first.png']}}));
+        await vi.advanceTimersByTimeAsync(1500);
+        facePrompt.value = 'second change';
+        await wrapper.find('#face-go').trigger('click');
+        apiMock.mockImplementation(routes({'/api/face/result/p1': {state: 'failed', detail: []}}));
+        await vi.advanceTimersByTimeAsync(1500);
+        expect(wrapper.find('.mount-title').text()).toBe('first change');
+        expect(wrapper.find('.error').text()).toContain('earlier versions remain');
+        wrapper.unmount();
+    });
+});
+
+
+describe('FaceRoom — proven recipe replay', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        localStorage.clear();
+        facePrompt.value = '';
+        faceSitter.value = null;
+        faceHandoff.value = null;
+        apiMock.mockReset();
+        apiMock.mockImplementation(routes());
+        faceRecipeHandoff.value = {name: 'A proven grin', recipe: {
+            prompt: 'a challenging grin', model: 'flux-2-dev', seed: 0, resolution: '1024x768',
+        }};
+    });
+    afterEach(() => vi.useRealTimers());
+    it('waits for the storeroom then restores painter, dimensions and zero seed together', async () => {
+        const wrapper = await boot();
+        await vi.advanceTimersByTimeAsync(0);
+        await wrapper.find('#face-go').trigger('click');
+        expect(apiMock).toHaveBeenCalledWith('/api/face/generate', {
+            prompt: 'a challenging grin', width: 1024, height: 768, seed: 0,
+            model: 'flux-2-dev.gguf', source: undefined,
+        });
+        expect(faceRecipeHandoff.value).toBeNull();
         wrapper.unmount();
     });
 });

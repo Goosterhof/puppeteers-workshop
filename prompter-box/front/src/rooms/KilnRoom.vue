@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {Checkbox, NumberInput, Textarea} from '@script-development/ui-inputs';
 import {onMounted, onUnmounted, ref, watch} from 'vue';
+import RoomFlow from '../components/RoomFlow.vue';
 import LogWell from '../components/LogWell.vue';
 import PottersWheel from '../components/PottersWheel.vue';
 import {api} from '../composables/useBoothApi';
@@ -8,6 +9,8 @@ import {createJobPoller} from '../composables/useJobPoller';
 import {openTab} from '../stores/booth';
 import {kilnKnobs} from '../lib/pins';
 import {kilnHandoff} from '../stores/pins';
+
+defineOptions({inheritAttrs: false});
 
 interface KilnCandidate {
     id: string;
@@ -121,6 +124,7 @@ onUnmounted(poller.stop);
 </script>
 
 <template>
+  <RoomFlow room="kiln" :current="candidate ? 3 : busy ? 2 : subject.trim() ? 1 : 0" />
   <div class="panel">
     <label class="field" for="kiln-subject">What are we firing?</label>
     <Textarea id="kiln-subject" v-model="subject" placeholder="a black omafiets leaning at a slight angle" />

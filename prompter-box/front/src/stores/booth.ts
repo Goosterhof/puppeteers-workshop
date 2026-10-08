@@ -1,6 +1,7 @@
 import {ref} from 'vue';
 import {api} from '../composables/useBoothApi';
 import {readStill} from '../lib/still';
+import type {StillAsset} from '../lib/face-workbench';
 
 // The booth's shared state — the module-global era's cross-room wires
 // (forgeLead, pickedImage, faceSitter, the footage shelf, tab navigation)
@@ -21,7 +22,21 @@ export const faceSitter = ref<string | null>(null);
 // The cues in flight — "Cue the stage →" and "Cue the face shop →" write
 // into another room's prompt box, so the boxes live here.
 export const stagePrompt = ref('');
+export const stageTaskHandoff = ref<string | null>(null);
 export const facePrompt = ref('');
+export const forgeIdea = ref('');
+export const forgeTarget = ref('wan');
+export const faceHandoff = ref<{asset: StillAsset; source: string; recipe: Record<string, unknown>; keepHistory: boolean} | null>(null);
+
+// A result becomes the next sitter through the same guarded casting hatch.
+// Carry its origin and recipe too; a filename alone loses the work's context.
+export async function refineStill(asset: StillAsset, recipe: Record<string, unknown> = {}, keepHistory = false): Promise<void> {
+    const source = asset.room === 'footage' ? asset.name : await castAsLead(asset.name, asset.room);
+    faceSitter.value = source;
+    facePrompt.value = '';
+    faceHandoff.value = {asset, source, recipe, keepHistory};
+    openTab('face');
+}
 
 // A cast lead's natural size, parked for the Stage's resolution matcher —
 // consumed when the Stage room rises in Phase 3.

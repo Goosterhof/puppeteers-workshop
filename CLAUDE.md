@@ -49,6 +49,52 @@ whatever dependency versions it last saw — it sat eight commits behind and one
 | **The Kiln Room** | `prompter-box/kiln.py` + `turntable.py` + `night_shift.py` + `stagehands.py` | The prop-firing spine (experiment log #00062): a subject phrase becomes a keyed, despilled, +6px-cropped hide and a Hunyuan3D GLB in one chain, with the Turntable's silhouette/voxel/island checks catching shredded thin structures and auto-refiring once at 224/0.4; every firing parks `pending` on the **Curing Rack** (nothing reaches `pack-queue/` without a thumb on Approve) and the **Night Shift** works a persisted call sheet overnight through the SAME `clear_the_set` guard (`stagehands.py` — the guard family extracted from server.py, one definition for every station). qwen3-vl grounds each firing and writes its Canister label. Turntable renders headless via pyrender+EGL; the shared guard rule stands unweakened. Containment: `python -m pytest prompter-box/tests/` (fixture-driven, no GPU; run with the ComfyUI venv python — see `prompter-box/requirements.txt`). Bench graft landed 2026-07-19 and the live end-to-end gate is witnessed: the omafiets shredded at 128, auto-refired to a QA-passing 224/0.4 mesh, cleared the real `pack-props.mjs` round-trip, and a 3-row Night Shift (one K=2) parked 4 labeled candidates unattended. Verify server changes live via `verify-sideport.py` on :7901 — never the investor's :7900 booth. Every candidate mounts on the **Potter's Wheel** (`front/src/lib/potters-wheel.ts`, wrapped by `PottersWheel.vue`) — a live drag-to-orbit GLB viewer, lit by a camera-riding over-the-shoulder key so no angle is ever dark: the firing bench mounts fresh pieces directly; on the Rack a click spotlights ONE candidate in an enlarged Canisters-style card above the grid (only the piece on the wheel turns — the shelf keeps a slow 4-second strip turn), and the whole booth runs one column capped at **1400px** on large monitors (every tab, one width — `front/src/App.vue` `.deck-inner`, which `auditions/DESIGN-SPEC.md` also names; the "1680px" this row carried until 2026-08-23 was drift against the code). Kiln settings carry knob-notes (octree = carving grid, threshold = voxel skin cut, seed = paint+mesh dice). Approved pairs surface in-booth on **the Prop Shelf** (`/api/shelf/list` reads pack-queue/ back as the Workshop's own prop library, married to each firing's record — consumers like the town sketches' `pack-props.mjs` come to the shelf, not the reverse), and the Rack carries a third verdict: **Discard** breaks a pending firing for good behind the break-pit confirm dialog (`rack_discard` — pending only, approved/superseded stay as the audit trail). three.js is an npm dep of the front (pinned 0.177, a lazy chunk — the vendor dir retired with the single-file era at the #00063 cutover). The keyer measures the ground against a **quadratic gradient surface** (the furniture law, 2026-08-02 — Krea RAW grounds are gradients a flat median refused), and two graduated furniture-law instruments ride alongside, each speaking BOTH key families (green default, magenta per the character key law — a green-skinned or green-glowing subject dissolves on green and fires on magenta; the mean-orc arc, 2026-08-13, brought the magenta family home with the i2v dominance rescue): `key-back.py` (one still plate → keyed hide, `[green|magenta]` arg) and `cut-stances.py` (the Bull's stance cutter: stillest-per-beat, foot-centroid registration, union crop, same family arg) — see runbook §The Kiln's furniture laws. |
 | **The Pinboard** | `prompter-box/pins.py` | Named, replayable recipes pinned from proven takes (idea #08's mutation, PR #14): recipes are born from working results and promoted BOTTOM-UP — a take that earned its keep gets its settings pinned and named from the Canisters (or a firing from the Curing Rack), and the pin becomes a **Formula** select that prefills a kiln firing, a Night Shift row, or a Stage cue. The Canisters record what WAS done; a pin marks what SHOULD be repeated — same store, two intents. Persisted beside the call sheet as `pinned-recipes.json` (hand-editable, diffable, atomically written, bench data the blueprint never tracks). |
 
+## Dedicated room flows — character refinement first (2026-10-08)
+
+All eleven tabs now carry their own task journey, defined in
+`front/src/lib/room-flows.ts` and rendered by `RoomFlow.vue`. The numbered
+steps navigate to real controls and open their settings drawers; they never
+submit a cue or force a reader through a wizard. The Prompt Book's right
+rail, keyboard tab pattern and bottom Callboard remain the shell.
+
+- **Face Shop:** explicit Create / Refine modes; character + change brief;
+  optional keep-unchanged guidance; equally sized source/result frames and
+  original comparison; a revision strip with direct refine, download and
+  animate acts. The browser keeps up to 40 working versions, the original,
+  draft and pending ComfyUI job ID in local storage. Reload observes the same
+  job rather than submitting another. The full archive remains The Canisters.
+- **Forge:** editable cue cards and a character-aware return from the Face
+  Shop's brief helper. **Stage:** task-first playbill (animate, text video,
+  motion transfer, advanced still painter), with technical settings in a
+  drawer. Stage stills can return directly to Face Shop for refinement.
+- **Foley:** sound-effect / video-score choice, reel validation and replay
+  of proven cue + seed pins. Face pins restore painter, dimensions and seed
+  as well as the prompt; pins still originate from working results.
+- **Kiln / Rack / Shelf:** firing journey, next candidate after a verdict,
+  approved-prop search and paired mesh/painting downloads. **Night Shift:**
+  explicit variants / subject-list entry (newlines or semicolons), kiln only,
+  with a door to the Rack. **Canisters:** direct character refinement while
+  preserving the Light Table's no-scroll-on-mount law.
+- **Understage:** the two native consoles are labelled Advanced and lead
+  back to Canisters; their first-entry iframe behaviour is retained.
+
+Casting and uploads now publish complete files exclusively through one
+atomic shelf helper. Same-name results from different painters cannot
+replace each other or an existing character; identical casts reuse their
+copy. All model execution and fail-closed GPU guards retain their contracts.
+
+**Verification:** fixture tests and the dev-only browser witness are separate
+from live generation. Run `node front/scripts/witness-flows.mjs` from
+`prompter-box/` after building: it serves the actual static bundle through
+Playwright fixtures, sweeps eleven tabs at 1440/1000, exercises comparison,
+refinement, refresh, archive handoff and subject-list entry, and writes its
+screenshots under the system temp directory. `WORKSHOP_BROWSER` selects an
+installed Chromium; optional `WORKSHOP_REFERENCE` / `WORKSHOP_RESULT` supply
+local WebP portraits. It starts no booth and runs no GPU jobs. Current
+source receipts and the PR own exact test counts. This flow arc has not
+replaced the investor's :7900 bench. The earlier #00063 / #00064 baseline
+walkthrough and the new live-refinement acceptance remain distinct receipts.
+
 ## Containment — the Sentinel, the lock on `main`, and how a change lands
 
 The blueprint gates itself. **`.github/workflows/sentinel.yml`** (armed

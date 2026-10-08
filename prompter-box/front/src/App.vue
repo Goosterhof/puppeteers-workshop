@@ -30,8 +30,8 @@ const TABS = [
     {id: 'face', label: 'Face Shop', room: FaceRoom},
     {id: 'foley', label: 'Foley Booth', room: FoleyRoom},
     {id: 'archive', label: 'The Canisters', room: ArchiveRoom},
-    {id: 'house-stage', label: 'Stage UI', room: HouseStageRoom},
-    {id: 'house-face', label: 'Face Shop UI', room: HouseFaceRoom},
+    {id: 'house-stage', label: 'Stage UI · Advanced', room: HouseStageRoom},
+    {id: 'house-face', label: 'Face UI · Advanced', room: HouseFaceRoom},
 ];
 
 // The Prompt Book (#00064): the eleven lines hang in four wings down the

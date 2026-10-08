@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import {nextTick, onUnmounted, reactive, ref, watch} from 'vue';
+import RoomFlow from '../components/RoomFlow.vue';
 import BreakPit from '../components/BreakPit.vue';
 import RackCard from '../components/RackCard.vue';
 import type {Firing} from '../components/RackCard.vue';
 import {api} from '../composables/useBoothApi';
+import {openTab} from '../stores/booth';
 
 const props = withDefaults(defineProps<{active?: boolean}>(), {active: false});
 
@@ -38,9 +40,14 @@ onUnmounted(() => {
     REDUCED_MOTION.removeEventListener('change', startSpin);
 });
 
+function followVerdict(previousIndex: number) {
+    if (!spotId.value || pending.value.some(e => e.id === spotId.value)) return;
+    spotId.value = pending.value[Math.max(0, previousIndex)]?.id ?? pending.value.at(-1)?.id ?? null;
+}
 async function loadRack() {
     error.value = '';
     try {
+        const previousIndex = pending.value.findIndex(e => e.id === spotId.value);
         pending.value = ((await api<{candidates?: Firing[]}>('/api/rack/list')).candidates || [])
             .filter(c => c.recipe.status === 'pending');
         // the Mend: a refired candidate's scar flares once, the first time it deals in
@@ -52,7 +59,7 @@ async function loadRack() {
             }
         }
         mendedIds.value = fresh;
-        if (spotId.value && !pending.value.some(e => e.id === spotId.value)) spotId.value = null;
+        followVerdict(previousIndex);
         startSpin();
     } catch (e) {
         error.value = (e as Error).message || String(e);
@@ -82,7 +89,12 @@ watch(() => props.active, a => {
 </script>
 
 <template>
+  <RoomFlow room="rack" :current="spotId ? 2 : 0" />
   <div class="panel">
+    <div class="task-picks">
+      <button v-if="pending.length && !spotId" @click="spotlight(pending[0]!.id)">Inspect the first candidate →</button>
+      <button @click="openTab('shelf')">See approved props →</button>
+    </div>
     <p class="note">Every fired candidate waits here for a verdict. Click a piece to put it
       on the Potter's Wheel — only the piece on the wheel turns in your hand. Three verdicts:
       <b>Approve</b> shelves the pair on the Prop Shelf, <b>Refire</b> re-meshes the SAME

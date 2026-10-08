@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import {NumberInput, SingleSelect, Textarea} from '@script-development/ui-inputs';
 import {computed, nextTick, onMounted, onUnmounted, ref, watch} from 'vue';
+import RoomFlow from '../components/RoomFlow.vue';
 import LogWell from '../components/LogWell.vue';
 import StampedMount from '../components/StampedMount.vue';
 import ThumbRow from '../components/ThumbRow.vue';
 import {api} from '../composables/useBoothApi';
 import {createJobPoller} from '../composables/useJobPoller';
 import {loadArchive} from '../stores/archive';
-import {castAsLead, leadRes, loadFoleySources, openTab, pickedImage, stagePrompt} from '../stores/booth';
+import {castAsLead, leadRes, loadFoleySources, openTab, pickedImage, refineStill, stagePrompt, stageTaskHandoff} from '../stores/booth';
 import {stageHandoff} from '../stores/pins';
 import {nearestResolution, RES_PRESETS} from '../lib/resolution';
+
+defineOptions({inheritAttrs: false});
 
 interface Performer {
     type: string;
@@ -88,7 +91,28 @@ const isImage = computed(() => kind.value === 't2i');
 
 // the playbill, the choreography shelf, and the resolution presets as
 // SingleSelect options — source order preserved, no alphabetizing
-const modelOptions = computed(() => models.value.map(m => ({
+const task = ref('i2v');
+const TASKS = [{id: 'i2v', label: 'Animate a still'}, {id: 't2v', label: 'Video from text'}, {id: 'swap', label: 'Transfer motion'}, {id: 't2i', label: 'Advanced still painter'}];
+const availableTasks = computed(() => TASKS.filter(t => models.value.some(m => m.kind === t.id)));
+function chooseTask(id: string) {
+    task.value = id;
+    const first = models.value.find(m => m.kind === id);
+    if (!first) {
+        modelType.value = '';
+        error.value = 'No installed performer serves that task — choose an available performance or install its weights.';
+    } else {
+        error.value = '';
+        if (performer()?.kind !== id) modelType.value = first.type;
+    }
+}
+watch([stageTaskHandoff, () => models.value.length], async ([request, loaded]) => {
+    if (!request || !loaded) return;
+    chooseTask(request);
+    await nextTick(); // Performer defaults land before matching the new lead's aspect.
+    if (stageTaskHandoff.value === request) stageTaskHandoff.value = null;
+}, {immediate: true});
+watch(modelType, () => { if (performer()) task.value = performer()!.kind; });
+const modelOptions = computed(() => models.value.filter(m => m.kind === task.value).map(m => ({
     id: m.type, label: `${m.name} · ${KIND_LABEL[m.kind] || m.kind}`,
 })));
 const guideOptions = computed(() => [
@@ -114,8 +138,8 @@ function applyPerformer() {
 watch(modelType, applyPerformer);
 
 // a cast lead arrived from another room — match the aspect, once
-watch(leadRes, v => {
-    if (!v) return;
+watch([leadRes, stageTaskHandoff, modelType], ([v, requestedTask]) => {
+    if (!v || requestedTask || !performer()) return;
     resolution.value = nearestResolution(resOptions.value, v.w, v.h);
     leadRes.value = null;
 });
@@ -126,7 +150,7 @@ watch(leadRes, v => {
 function dressNumericKnobs(r: Record<string, unknown>) {
     if (Number(r.steps)) steps.value = Number(r.steps);
     if (r.guidance !== undefined && !Number.isNaN(Number(r.guidance))) guidance.value = Number(r.guidance);
-    if (Number(r.seed)) seed.value = Number(r.seed);
+    if (r.seed !== undefined && Number.isFinite(Number(r.seed))) seed.value = Number(r.seed);
     if (Number(r.frames)) length.value = Number(r.frames);
 }
 
@@ -234,7 +258,10 @@ function takeMount(f: string, job: StageJob): TakeMount {
         meta: {model: job.model, seed: job.seed,
             loras: (job.loras || []).map(l => l.replace(/\.safetensors$/i, ''))},
         acts: image
-            ? [{label: 'Cast as a lead →', run: async ({relabel}) => {
+            ? [{label: 'Refine this character →', run: async () => {
+                try { await refineStill({room: 'stage', name: f}, {model: job.model, seed: job.seed}); }
+                catch (e) { error.value = (e as Error).message || String(e); }
+            }}, {label: 'Cast as a lead →', run: async ({relabel}) => {
                 await castAsLead(f, 'stage');
                 relabel('Cast — it is in the footage now');
             }}]
@@ -281,13 +308,12 @@ onUnmounted(poller.stop);
 </script>
 
 <template>
+  <RoomFlow room="stage" :current="results?.length ? 3 : logShown ? 2 : pickedImage ? 1 : 0" />
   <div class="panel">
-    <label class="field" for="stage-model">The performer — every model with weights on the floor</label>
-    <SingleSelect
-      id="stage-model" v-model="modelType"
-      :options="modelOptions" label="label" :alphabetical-sort="false"
-      placeholder="— the playbill loads… —" options-label="The performers on the playbill"
-    />
+    <h3 class="flow-heading">1 · What should the Stage perform?</h3>
+    <div id="stage-task" class="task-picks">
+      <button v-for="t in availableTasks" :key="t.id" :aria-pressed="task === t.id" @click="chooseTask(t.id)">{{ t.label }}</button>
+    </div>
     <label class="field" for="stage-prompt">The cue</label>
     <Textarea id="stage-prompt" v-model="stagePrompt" />
     <label id="stage-lead-label" class="field">{{ LEAD_LABEL[kind ?? ''] || 'The lead' }}</label>
@@ -296,10 +322,18 @@ onUnmounted(poller.stop);
       <label class="field" for="stage-guide">The choreography — the driving video whose motion the character re-performs</label>
       <SingleSelect
         id="stage-guide" v-model="guide"
-        :options="guideOptions" label="label" :alphabetical-sort="false"
+        :options="guideOptions" :label="(option: {label: string}) => option.label" :alphabetical-sort="false"
         options-label="The driving videos — stage takes, then footage"
       />
     </div>
+    <details class="room-settings">
+      <summary>Advanced settings · performer, wardrobe and sampling</summary>
+    <label class="field" for="stage-model">The performer — every model with weights on the floor</label>
+    <SingleSelect
+      id="stage-model" v-model="modelType"
+      :options="modelOptions" :label="(option: {label: string}) => option.label" :alphabetical-sort="false"
+      placeholder="— the playbill loads… —" options-label="The performers on the playbill"
+    />
     <div v-show="garments.length" id="stage-lora-row">
       <label class="field">The wardrobe — LoRAs on this performer's shelf (click to don, then set the strength)</label>
       <div id="stage-loras" class="lorarack">
@@ -314,7 +348,7 @@ onUnmounted(poller.stop);
       <div><label class="field" for="stage-res">Resolution</label>
         <SingleSelect
           id="stage-res" v-model="resolution"
-          :options="resSelectOptions" label="label" :alphabetical-sort="false"
+          :options="resSelectOptions" :label="(option: {label: string}) => option.label" :alphabetical-sort="false"
           options-label="The resolution presets"
         /></div>
       <div v-show="!isImage" id="stage-len-wrap"><label class="field" for="stage-len">Frames</label><NumberInput id="stage-len" v-model="length" :min="9" :step="4" /></div>
@@ -322,8 +356,10 @@ onUnmounted(poller.stop);
       <div><label class="field" for="stage-steps">Steps</label><NumberInput id="stage-steps" v-model="steps" :min="1" :max="100" /></div>
       <div><label class="field" for="stage-guidance">Guidance</label><NumberInput id="stage-guidance" v-model="guidance" :min="0" :step="0.5" /></div>
       <div><label class="field" for="stage-seed">Seed</label><NumberInput id="stage-seed" v-model="seed" /></div>
-      <div><button id="stage-go" class="fire" style="margin-top:0" @click="cue">Cue the stage</button></div>
+
     </div>
+    </details>
+    <button id="stage-go" class="fire" @click="cue">{{ isImage ? 'Paint the still' : 'Perform this take' }}</button>
     <p id="stage-note" class="note">{{ note }}</p>
     <p v-show="error" class="error">{{ error }}</p>
     <LogWell :lines="logLines" :shown="logShown" />

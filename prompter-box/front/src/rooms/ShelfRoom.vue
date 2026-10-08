@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import {nextTick, ref, watch} from 'vue';
+import {computed, nextTick, ref, watch} from 'vue';
+import {TextInput} from '@script-development/ui-inputs';
+import RoomFlow from '../components/RoomFlow.vue';
 import PottersWheel from '../components/PottersWheel.vue';
 import {api} from '../composables/useBoothApi';
 
@@ -17,6 +19,8 @@ interface ShelfProp {
 const props = withDefaults(defineProps<{active?: boolean}>(), {active: false});
 
 const shelf = ref<ShelfProp[]>([]);
+const search = ref('');
+const shown = computed(() => shelf.value.filter(p => `${p.name} ${p.subject || ''}`.toLowerCase().includes(search.value.trim().toLowerCase())));
 const spotName = ref<string | null>(null);
 const error = ref('');
 const view = ref<HTMLElement | null>(null);
@@ -54,13 +58,11 @@ watch(() => props.active, a => {
 </script>
 
 <template>
+  <RoomFlow room="shelf" :current="spotName ? 2 : search.trim() ? 1 : 0" />
   <div class="panel">
-    <p class="note">Every approved firing lives here — the Workshop's own prop library,
-      mesh and painting side by side. Consumers come to the shelf, not the other way
-      around: the town sketches pack from it with
-      <code>node pack-props.mjs ~/code/video-lab/prompter-box/pack-queue</code>, and
-      whatever the lab builds next reads the same shelf. Click a prop to put it on the
-      Potter's Wheel.</p>
+    <label class="field" for="shelf-search">Find an approved prop</label>
+    <TextInput id="shelf-search" v-model="search" placeholder="Name or subject…" />
+    <p class="note">{{ shown.length }} approved props on this shelf. Choose one to inspect and download its mesh and painting.</p>
     <p v-show="error" class="error">{{ error }}</p>
     <div id="shelf-view" ref="view" class="result">
       <article
@@ -77,16 +79,19 @@ watch(() => props.active, a => {
           <p class="title">{{ prop.name }}</p>
           <div class="chips"><span v-for="c in chips(prop)" :key="c" class="chip">{{ c }}</span></div>
           <p v-if="prop.subject" class="qa-line">{{ prop.subject }}</p>
-          <div class="acts">
+          <div id="shelf-export" class="acts">
+            <a class="act" :href="`/pack-queue/${prop.glb}`" :download="prop.glb">Download mesh ↓</a>
+            <a v-if="prop.hide" class="act" :href="`/pack-queue/${prop.hide}`" :download="prop.hide">Download painting ↓</a>
             <button class="act" @click="spotlight(prop.name)">✕ Off the wheel</button>
           </div>
         </div>
       </article>
     </div>
     <div id="shelf-grid">
+      <p v-if="shelf.length && !shown.length" class="empty">No approved prop answers that description — try another name.</p>
       <p v-if="!shelf.length" class="empty">The shelf is bare — Approve a firing on the Curing Rack and it lands here.</p>
       <article
-        v-for="prop in shelf" :key="prop.name"
+        v-for="prop in shown" :key="prop.name"
         class="canister candidate" :class="{spotlit: prop.name === spotName}" :data-name="prop.name"
       >
         <div
