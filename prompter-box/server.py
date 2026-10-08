@@ -574,6 +574,7 @@ def shelve_cast(src):
 
 def publish_still(staging, name, *, reuse):
     """Publish a whole file exclusively; uploads and casts share the same door."""
+    staging.chmod(0o644)  # match ordinary shelf files before publishing the hardlink
     stem, suffix = Path(name).stem, Path(name).suffix
     n = 1
     while True:
@@ -968,12 +969,23 @@ class BoothWindow(BaseHTTPRequestHandler):
         self.reply({"prompt_id": res["prompt_id"], "evicted": evicted})
 
     def api_face_result(self, prompt_id):
+        history_url = f"{COMFY}/history/{urllib.parse.quote(prompt_id)}"
         try:
-            hist = http_json(f"{COMFY}/history/{urllib.parse.quote(prompt_id)}", timeout=5)
+            hist = http_json(history_url, timeout=5)
+            if prompt_id not in hist:
+                queue = http_json(f"{COMFY}/queue", timeout=5)
+                # ComfyUI queue tuples are [number, prompt_id, prompt, ...].
+                if any(len(row) > 1 and row[1] == prompt_id
+                       for key in ("queue_running", "queue_pending")
+                       for row in queue.get(key, [])):
+                    return self.reply({"state": "painting"})
+                # Completion can move the job from queue to history between
+                # reads. Check history again before declaring the job lost.
+                hist = http_json(history_url, timeout=5)
         except OSError:
             return self.fail("The Face Shop is dark — ComfyUI is not answering on :8188.", 502)
         if prompt_id not in hist:
-            return self.reply({"state": "painting"})
+            return self.reply({"state": "lost"})
         entry = hist[prompt_id]
         if entry["status"].get("status_str") == "error":
             return self.reply({"state": "failed", "detail": entry["status"].get("messages", [])})

@@ -31,7 +31,11 @@ export const faceHandoff = ref<{asset: StillAsset; source: string; recipe: Recor
 // A result becomes the next sitter through the same guarded casting hatch.
 // Carry its origin and recipe too; a filename alone loses the work's context.
 export async function refineStill(asset: StillAsset, recipe: Record<string, unknown> = {}, keepHistory = false): Promise<void> {
-    const source = asset.room === 'footage' ? asset.name : await castAsLead(asset.name, asset.room);
+    const source = asset.room === 'footage' ? asset.name : await shelvePainting(asset.name, asset.room);
+    if (asset.room === 'stage') {
+        recipe = {...recipe};
+        delete recipe.model;
+    }
     faceSitter.value = source;
     facePrompt.value = '';
     faceHandoff.value = {asset, source, recipe, keepHistory};
@@ -69,10 +73,17 @@ export async function shelveStill(file: File): Promise<string> {
     return shelved;
 }
 
-// Cast a still into footage/ and make it the standing lead everywhere.
-export async function castAsLead(image: string, from?: string): Promise<string> {
+// Shelving a painting does not choose another room's character.
+export async function shelvePainting(image: string, from?: string): Promise<string> {
     const {cast} = await api<{cast: string}>('/api/stage/cast', from ? {image, from} : {image});
+    await loadFootage();
+    return cast;
+}
+
+// Explicit Stage casting also selects the shared lead.
+export async function castAsLead(image: string, from?: string): Promise<string> {
+    const cast = await shelvePainting(image, from);
     forgeLead.value = cast;
-    await loadFootage(cast);
+    pickedImage.value = cast;
     return cast;
 }

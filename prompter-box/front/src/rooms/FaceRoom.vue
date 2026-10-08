@@ -10,7 +10,7 @@ import type {JobPoller} from '../composables/useJobPoller';
 import {readFaceWorkbench, saveFaceWorkbench, stillUrl} from '../lib/face-workbench';
 import type {FaceRecipe, FaceRevision, StillAsset} from '../lib/face-workbench';
 import {loadArchive} from '../stores/archive';
-import {castAsLead, faceHandoff, facePrompt, faceSitter, forgeIdea, forgeLead, forgeTarget, leadRes, openTab, refineStill, stagePrompt, stageTaskHandoff} from '../stores/booth';
+import {castAsLead, faceHandoff, facePrompt, faceSitter, forgeIdea, forgeLead, forgeTarget, leadRes, openTab, refineStill, stageTaskHandoff} from '../stores/booth';
 import {faceRecipeHandoff} from '../stores/pins';
 
 defineOptions({inheritAttrs: false});
@@ -25,6 +25,9 @@ if (saved && restore) {
     facePrompt.value = saved.draft.prompt;
 }
 const painters = ref<string[]>([]);
+const paintersReady = ref(false);
+const painterError = ref('');
+const requestedPainter = ref('');
 const painter = ref(saved && restore ? saved.draft.model : '');
 const painterOptions = computed(() => painters.value.map(name => ({id: name, label: name})));
 const width = ref(saved && restore ? saved.draft.width : 768);
@@ -60,25 +63,45 @@ watch(faceSitter, source => {
     }
 });
 
-function chooseMode(next: string) {
-    mode.value = next;
-    if (next === 'create') {
-        faceSitter.value = null;
-        original.value = null;
-        revisions.value = [];
-        selected.value = null;
-    }
-    else if (!faceSitter.value && original.value?.room === 'footage') faceSitter.value = original.value.name;
-}
-function pickSitter(name: string) {
-    if (busy.value || transferring.value) return;
+const resetDialog = ref<HTMLDialogElement | null>(null);
+let nextCharacter: string | null = null;
+function startBench(name: string | null) {
     faceSitter.value = name;
-    mode.value = 'refine';
-    original.value = {room: 'footage', name};
+    mode.value = name ? 'refine' : 'create';
+    original.value = name ? {room: 'footage', name} : null;
     revisions.value = [];
     selected.value = null;
+    changeKeep.value = '';
     error.value = '';
 }
+function requestBench(name: string | null) {
+    if (busy.value || pending.value || transferring.value) return;
+    if (revisions.value.length) {
+        nextCharacter = name;
+        resetDialog.value?.showModal();
+    } else startBench(name);
+}
+function confirmNewBench() {
+    resetDialog.value?.close();
+    if (!busy.value && !pending.value && !transferring.value) startBench(nextCharacter);
+}
+function chooseMode(next: string) {
+    if (next === mode.value) return;
+    if (next === 'create') requestBench(null);
+    else mode.value = 'refine';
+}
+function pickSitter(name: string) {
+    if (name === faceSitter.value) return;
+    requestBench(name);
+}
+function matchRequestedPainter() {
+    if (!paintersReady.value || !requestedPainter.value) return;
+    const name = requestedPainter.value;
+    const match = painters.value.find(p => p.replace(/\.(gguf|safetensors)$/i, '') === name);
+    if (match) { painter.value = match; requestedPainter.value = ''; }
+    else formulaNote.value = `The recipe's painter “${name}” is absent. Choose an available painter in Advanced settings.`;
+}
+watch([requestedPainter, paintersReady], matchRequestedPainter);
 function applyRecipe(r: Record<string, unknown>) {
     if (typeof r.prompt === 'string') facePrompt.value = r.prompt;
     if (r.seed !== undefined && Number.isFinite(Number(r.seed))) seed.value = Number(r.seed);
@@ -86,19 +109,16 @@ function applyRecipe(r: Record<string, unknown>) {
         const [w, h] = r.resolution.split('x').map(Number);
         if (w && h) { width.value = w; height.value = h; }
     }
-    const name = typeof r.model === 'string' ? r.model.replace(/\.(gguf|safetensors)$/i, '') : '';
-    const match = painters.value.find(p => p.replace(/\.(gguf|safetensors)$/i, '') === name);
-    if (match) painter.value = match;
-    else if (name) formulaNote.value = `The recipe's painter “${name}” is absent. Choose an available painter in Advanced settings.`;
+    if (typeof r.model === 'string') requestedPainter.value = r.model.replace(/\.(gguf|safetensors)$/i, '');
 }
-watch([faceRecipeHandoff, () => painters.value.length], ([handoff, loaded]) => {
-    if (!handoff || !loaded) return;
-    formulaNote.value = `Wearing “${handoff.name}” — cue, painter, seed and dimensions restored where present.`;
+watch(faceRecipeHandoff, handoff => {
+    if (!handoff) return;
+    formulaNote.value = `Wearing “${handoff.name}” — cue, seed and dimensions restored; painter matched when the roster answers.`;
     applyRecipe(handoff.recipe);
     faceRecipeHandoff.value = null;
 }, {immediate: true});
-watch([faceHandoff, () => painters.value.length], ([handoff, loaded]) => {
-    if (!handoff || !loaded) return;
+watch(faceHandoff, handoff => {
+    if (!handoff) return;
     if (!handoff.keepHistory && !revisions.value.some(r => r.name === handoff.asset.name && handoff.asset.room === 'face')) {
         original.value = handoff.asset;
         revisions.value = [];
@@ -124,11 +144,21 @@ const brokenBrush = (detail?: FaceJob['detail']) => (detail || [])
     .map(d => d.exception_message ? `${d.node_type ? `${d.node_type}: ` : ''}${d.exception_message}` : '')
     .filter(Boolean).join('\n');
 let poller: JobPoller | null = null;
-onUnmounted(() => poller?.stop());
+let watchGeneration = 0;
+onUnmounted(() => { watchGeneration++; poller?.stop(); });
+function abandonPainting() {
+    watchGeneration++;
+    poller?.stop();
+    pending.value = null;
+    busy.value = false;
+    error.value = '';
+    persist();
+}
 
 function watchPaint(id: string, recipe: FaceRecipe, source: StillAsset | null) {
     busy.value = true;
     poller?.stop();
+    const generation = ++watchGeneration;
     poller = createJobPoller({
         fetchJob: async () => {
             const r = await api<FaceJob>(`/api/face/result/${encodeURIComponent(id)}`);
@@ -136,6 +166,7 @@ function watchPaint(id: string, recipe: FaceRecipe, source: StillAsset | null) {
         },
         intervalMs: 1500,
         onSettled: r => {
+            if (generation !== watchGeneration) return;
             busy.value = false;
             pending.value = null;
             if (r.state === 'done') {
@@ -146,6 +177,8 @@ function watchPaint(id: string, recipe: FaceRecipe, source: StillAsset | null) {
                 revisions.value = revisions.value.slice(-40);
                 if (!original.value && selected.value) original.value = {room: 'face', name: selected.value};
                 void loadArchive().catch(() => {});
+            } else if (r.state === 'lost') {
+                error.value = 'The Face Shop no longer knows this painting — it is absent from its queue and history. Your earlier versions remain; you can paint again.';
             } else {
                 const detail = brokenBrush(r.detail);
                 error.value = detail ? `The Face Shop rejected the cue — the broken brush:\n${detail}`
@@ -153,6 +186,7 @@ function watchPaint(id: string, recipe: FaceRecipe, source: StillAsset | null) {
             }
         },
         onLost: e => {
+            if (generation !== watchGeneration) return;
             busy.value = false;
             error.value = `The booth lost sight of the Face Shop — ${(e as Error)?.message || 'the server stopped answering'}. Reconnect below; the painting may still land in The Canisters.`;
             // Keep the job ID and its exact recipe. Reconnection observes; it never re-fires.
@@ -196,7 +230,6 @@ const acts = computed(() => current.value ? [
         try {
             if (busy.value || transferring.value) return;
             await castAsLead(current.value!.name);
-            stagePrompt.value = '';
             stageTaskHandoff.value = 'i2v';
             const img = el?.querySelector('img');
             if (img?.naturalWidth) leadRes.value = {w: img.naturalWidth, h: img.naturalHeight};
@@ -209,13 +242,20 @@ const dropBinned = (url: string) => {
     if (!revisions.value.some(r => r.name === selected.value)) selected.value = revisions.value.at(-1)?.name ?? null;
 };
 
-onMounted(async () => {
+async function loadPainters() {
+    paintersReady.value = false;
+    painterError.value = '';
     try {
         const {painters: list, default: def} = await api<{painters: string[]; default?: string}>('/api/face/models');
         painters.value = list;
         if (!list.includes(painter.value) && def) painter.value = def;
-    } catch { /* The first cue names the unavailable easel. */ }
+        paintersReady.value = true;
+    } catch { painterError.value = 'The painter roster is unavailable. Your character and cue are ready; retry the list before choosing a painter.'; }
+}
+onMounted(async () => {
+    // A pending painting can be observed even if the painter roster is dark.
     if (pending.value) reconnect();
+    await loadPainters();
 });
 </script>
 
@@ -226,8 +266,8 @@ onMounted(async () => {
     <section id="face-source">
       <h3 class="flow-heading">1 · Choose where this version begins</h3>
       <div class="task-picks">
-        <button :aria-pressed="mode === 'refine'" :disabled="busy" @click="chooseMode('refine')">Refine a character</button>
-        <button :aria-pressed="mode === 'create'" :disabled="busy" @click="chooseMode('create')">Create a new still</button>
+        <button :aria-pressed="mode === 'refine'" :disabled="busy || !!pending || transferring" @click="chooseMode('refine')">Refine a character</button>
+        <button :aria-pressed="mode === 'create'" :disabled="busy || !!pending || transferring" @click="chooseMode('create')">Create a new still</button>
       </div>
       <template v-if="mode === 'refine'">
         <figure v-if="sitter" class="character-source"><img :src="stillUrl(sitter)" alt="The character chosen for this change"><figcaption>{{ sitter.name }}</figcaption></figure>
@@ -255,9 +295,14 @@ onMounted(async () => {
       <p class="note">Refinements follow the source dimensions. A fixed seed helps compare changes; it cannot guarantee that the character stays identical.</p>
     </details>
     <p v-if="formulaNote" class="note">{{ formulaNote }}</p>
+    <p v-if="painterError" class="note">{{ painterError }} <button class="act" @click="loadPainters">Retry painter list</button></p>
     <h3 class="flow-heading">3 · Call the painter</h3>
     <button id="face-go" class="fire" :disabled="busy || !!pending || transferring" @click="cue">{{ busy ? 'Painting…' : mode === 'refine' ? 'Paint this change' : 'Paint the still' }}</button>
-    <p v-if="pending && !busy" class="note">A painting is awaiting reconnection. <button class="act" @click="reconnect">Reconnect to the painting</button></p>
+    <div v-if="pending" class="note pending-painting">
+      <p v-if="!busy">A painting is awaiting reconnection. <button class="act" @click="reconnect">Reconnect to the painting</button></p>
+      <button id="face-abandon" class="act" @click="abandonPainting">Abandon this painting</button>
+      <p>This releases the bench and keeps your versions. A painting still running may finish in The Canisters.</p>
+    </div>
     <p v-show="error" class="error" role="alert">{{ error }}</p>
     </div>
     <div class="face-output">
@@ -290,6 +335,14 @@ onMounted(async () => {
     </section>
     </div>
   </div>
+  <dialog ref="resetDialog" class="take-bin" @cancel="nextCharacter = null">
+    <h2>Start a new character bench?</h2>
+    <p>This clears the working versions and their recipes from this bench. The paintings remain in The Canisters.</p>
+    <div class="acts">
+      <button class="act" @click="resetDialog?.close()">Keep this character</button>
+      <button id="face-new-confirm" class="fire" @click="confirmNewBench">Start new bench</button>
+    </div>
+  </dialog>
 </template>
 
 <style>

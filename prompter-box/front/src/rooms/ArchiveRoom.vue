@@ -12,7 +12,7 @@ import type {ShelfItem} from '../lib/canisters';
 import {canisterRecipe} from '../lib/pins';
 import type {PinnedRecipe} from '../lib/pins';
 import {archive, loadArchive} from '../stores/archive';
-import {castAsLead, leadRes, loadFoleySources, openTab, refineStill, stagePrompt, stageTaskHandoff} from '../stores/booth';
+import {castAsLead, leadRes, loadFoleySources, openTab, refineStill, stageTaskHandoff} from '../stores/booth';
 import {faceRecipeHandoff, foleyHandoff, hangPin, kilnHandoff, loadPins, pins, stageHandoff, takeDownPin} from '../stores/pins';
 
 // The Light Table (2026-08-23) — the room stopped being a wall of prints you
@@ -161,7 +161,6 @@ function buildActs(it: ShelfItem): MountAct[] {
     if (it.room === 'face') {
         rows.push({label: 'Send to the stage →', run: async ctx => {
             await castAsLead(it.name);
-            stagePrompt.value = '';
             stageTaskHandoff.value = 'i2v';
             const img = ctx.el?.querySelector('img');
             if (img?.naturalWidth) leadRes.value = {w: img.naturalWidth, h: img.naturalHeight};
@@ -300,16 +299,41 @@ function onKeydown(e: KeyboardEvent) {
 // The bench sticks BELOW the shelf head, whose height changes when the pills
 // wrap — so the room measures it rather than guessing a number.
 let ruler: ResizeObserver | undefined;
+let measuredBody: HTMLElement | null = null;
 function measureHead() {
     const h = head.value?.offsetHeight;
     if (h) root.value?.style.setProperty('--shelf-head', `${Math.round(h)}px`);
+    measurePrint(root.value);
 }
+function measurePrint(panel: HTMLElement | null) {
+    if (!panel) return;
+    const deck = panel.closest('.deck');
+    const frame = panel.querySelector<HTMLElement>('.mount-frame');
+    const body = panel.querySelector<HTMLElement>('.mount-body');
+    const bench = panel.querySelector<HTMLElement>('.bench');
+    if (!deck || !frame || !body || !bench) return;
+    // Reserve the actual cue/chips/actions height, including wrapped rows.
+    // A narrow print puts that body beside its media rather than below it.
+    const stacked = getComputedStyle(body.parentElement!).display !== 'grid';
+    const bodyHeight = stacked ? body.getBoundingClientRect().height : 0;
+    const padding = Number.parseFloat(getComputedStyle(bench).paddingBottom) || 0;
+    const available = deck.getBoundingClientRect().bottom - frame.getBoundingClientRect().top - bodyHeight - padding - 8;
+    panel.style.setProperty('--bench-media-height', `${Math.max(0, Math.floor(available))}px`);
+}
+watch(mounted, () => nextTick(() => {
+    if (measuredBody) ruler?.unobserve(measuredBody);
+    measuredBody = root.value?.querySelector<HTMLElement>('.mount-body') ?? null;
+    if (measuredBody) ruler?.observe(measuredBody);
+    measureHead();
+}));
 
 onMounted(() => {
     document.addEventListener('keydown', onKeydown);
     if (typeof ResizeObserver === 'undefined' || !head.value) return;
     ruler = new ResizeObserver(measureHead);
     ruler.observe(head.value);
+    const deck = root.value?.closest('.deck');
+    if (deck) ruler.observe(deck);
 });
 onBeforeUnmount(() => {
     document.removeEventListener('keydown', onKeydown);
@@ -327,9 +351,9 @@ watch(() => props.active, a => {
 </script>
 
 <template>
-  <RoomFlow room="archive" :current="mounted ? 2 : filtered ? 1 : 0" />
   <div ref="root" class="panel light-table">
     <div ref="head" class="shelf-head">
+      <RoomFlow room="archive" :current="mounted ? 2 : filtered ? 1 : 0" />
       <div class="row">
         <div style="flex:2;min-width:220px">
           <label class="field" for="arch-search">Search the shelves — filename, prompt slug, seed</label>
@@ -446,11 +470,9 @@ watch(() => props.active, a => {
    760) — but on a short window the lamp lowers rather than the acts row
    falling off the bottom of the screen */
 .bench .mount-frame img, .bench .mount-frame video {
-  /* 300 = the head's own offset in the deck + the print's body + the bench's
-     lamplight padding + the footlight ledger. Measured, not guessed: at a
-     1000px window the whole print INCLUDING its acts row has to be reachable
-     without scrolling, or the bench is not a bench. */
-  max-height: min(62vh, calc(100vh - var(--shelf-head) - 300px));
+  /* Measure the room's real remaining height, reserving wrapped action rows
+     and the footlight ledger. The fallback is only for the initial layout. */
+  max-height: min(62vh, var(--bench-media-height, calc(100vh - var(--shelf-head) - 350px)));
 }
 .bench-bare {
   font-size: 12.5px; font-style: italic; color: var(--ink-soft);
@@ -498,7 +520,7 @@ watch(() => props.active, a => {
   .bench { max-height: calc(100vh - var(--shelf-head) - 16px); padding: 12px 12px 14px; }
   .bench-narrow .mount { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
   .bench-narrow .mount-frame { align-items: center; }
-  .bench-narrow .mount-frame img, .bench-narrow .mount-frame video { max-height: 40vh; }
+  .bench-narrow .mount-frame img, .bench-narrow .mount-frame video { max-height: min(40vh, var(--bench-media-height, 40vh)); }
   .bench-narrow .mount-body { padding: 12px 14px 14px; }
   .bench-narrow .mount-title { font-size: 12.5px; }
 }

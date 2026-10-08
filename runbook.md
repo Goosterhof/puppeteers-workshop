@@ -176,9 +176,15 @@ never scrolls — the folio does.
   brief → paint → compare → choose the next version. Use **Refine this
   version** or **Refine the original** to branch without re-uploading; use
   **Animate this version** when the still is ready. Picking a different still
-  starts another working character; all earlier files remain in Canisters.
+  starts another working character after confirmation if versions are tracked;
+  re-clicking the current sitter keeps its lineage. All earlier files remain
+  in Canisters.
   The browser restores the latest 40 working versions and a pending painting
-  after refresh through local storage (when the browser permits it). Models
+  after refresh through local storage (when the browser permits it). If a
+  painting disappears from ComfyUI's queue and history, the bench releases it.
+  **Abandon this painting** also frees the bench during an outage while
+  keeping earlier versions; a running painting can still finish in Canisters.
+  Models
   do not guarantee identity preservation: inspect the comparison. The Stage
   and Foley choose tasks before technical settings; Night Shift distinguishes
   variants from subject lists, and only queues kiln jobs. Prop Shelf exports

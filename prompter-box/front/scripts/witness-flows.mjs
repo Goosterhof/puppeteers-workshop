@@ -1,14 +1,14 @@
 // Dev-only browser witness. Serves the committed bundle through Playwright
 // route fulfillment: no booth, models, GPU jobs, or investor assets are changed.
 import {chromium} from 'playwright-core';
-import {readFile, mkdir, readdir, access} from 'node:fs/promises';
+import {readFile, mkdir, mkdtemp, readdir, access} from 'node:fs/promises';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {homedir, tmpdir} from 'node:os';
 import assert from 'node:assert/strict';
 
 const root = dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
-const out = process.env.WORKSHOP_WITNESS_OUT || join(tmpdir(), 'workshop-flow-witness');
+const out = process.env.WORKSHOP_WITNESS_OUT || await mkdtemp(join(tmpdir(), 'workshop-flow-witness-'));
 await mkdir(out, {recursive: true});
 async function browserPath() {
     if (process.env.WORKSHOP_BROWSER) return process.env.WORKSHOP_BROWSER;
@@ -59,7 +59,7 @@ try {
             if (path === '/api/face/models') return json({painters: ['flux-2-klein-9b.gguf'], default: 'flux-2-klein-9b.gguf'});
             if (path === '/api/forge/models') return json({models: []});
             if (path === '/api/foley/sources') return json({stage: ['motion.mp4'], footage: []});
-            if (path === '/api/archive') return json({face: painted ? [{name: 'refined.png', kind: 'image', mtime: Date.now()/1000, meta: {prompt: 'sharpen the grin', model: 'flux-2-klein-9b', seed: 7}}] : [], stage: [], foley: []});
+            if (path === '/api/archive') return json({face: painted ? [{name: 'refined.png', kind: 'image', mtime: Date.now()/1000, meta: {prompt: 'sharpen the grin', model: 'flux-2-klein-9b', seed: 7}}, ...Array.from({length: 20}, (_, i) => ({name: `older-${i}.png`, kind: 'image', mtime: Date.now()/1000-i-1, meta: {prompt: 'keep the character and costume while changing the expression; compare the silhouette and lighting before choosing this take', model: 'flux-2-klein-9b', seed: i}}))] : [], stage: [], foley: []});
             if (path.startsWith('/api/face/result/')) return json({state: 'done', images: ['refined.png']});
             if (path === '/api/pins') return json({pins: []});
             if (path === '/api/rack/list') return json({candidates: []});
@@ -99,9 +99,11 @@ try {
         // A previous still-painting task must not turn Animate into another still.
         await page.locator('[data-tab="stage"]').click();
         await page.getByRole('button', {name: 'Advanced still painter', exact: true}).click();
+        await page.locator('#stage-prompt').fill('the character gives a small bow');
         await page.locator('[data-tab="face"]').click();
         await page.getByRole('button', {name: 'Animate this version →', exact: true}).click();
         await page.waitForFunction(() => document.querySelector('#stage-task button[aria-pressed="true"]')?.textContent === 'Animate a still');
+        assert.equal(await page.locator('#stage-prompt').inputValue(), 'the character gives a small bow');
         const tabs = await page.locator('.rail .tab').evaluateAll(nodes => nodes.map(n => n.dataset.tab));
         assert.equal(tabs.length, 11);
         for (const tab of tabs) {
@@ -129,12 +131,26 @@ try {
         assert.deepEqual(posts.find(p => p.path === '/api/queue/add').body.subject, ['a copper kettle', 'a wooden ladder']);
         groups++;
         await page.locator('[data-tab="archive"]').click();
-        await page.locator('.canister').first().click();
+        await page.locator('.deck').evaluate(el => { el.scrollTop = 0; });
+        await page.locator('.canister').first().evaluate(el => el.click());
+        await page.locator('.bench .mount-frame img').waitFor();
+        await page.locator('.bench .mount-frame img').evaluate(async img => { await img.decode(); });
+        const geometry = await page.locator('.bench .mount-acts').evaluate(el => ({top: el.getBoundingClientRect().top, bottom: el.getBoundingClientRect().bottom, limit: document.querySelector('.deck').getBoundingClientRect().bottom}));
+        await page.screenshot({path: join(out, `canisters-actions-${width}.png`)});
+        assert.ok(geometry.top >= 0 && geometry.bottom <= geometry.limit, `Canisters actions hidden at ${width}: ${JSON.stringify(geometry)}`);
         const scroll = await page.locator('.deck').evaluate(el => el.scrollTop);
         // Playwright's actionability scroll would move a narrow folded shelf
         // before a second click. Dispatch the mount itself to measure the app.
         await page.locator('.canister').first().evaluate(el => el.click());
         assert.equal(await page.locator('.deck').evaluate(el => el.scrollTop), scroll);
+        // A changed caption/media height must also preserve a reader's place
+        // halfway down a real shelf, after ResizeObserver and layout settle.
+        await page.locator('.deck').evaluate(el => { el.scrollTop = 180; });
+        const deepScroll = await page.locator('.deck').evaluate(el => el.scrollTop);
+        assert.ok(deepScroll > 0);
+        await page.locator('.canister').nth(1).evaluate(el => el.click());
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        assert.equal(await page.locator('.deck').evaluate(el => el.scrollTop), deepScroll, `Mount moved the shelf at ${width}`);
         await page.getByRole('button', {name: 'Refine this character →', exact: true}).click();
         await page.locator('#panel-face').waitFor({state: 'visible'});
         groups++;

@@ -566,3 +566,49 @@ class TestCharacterHandoffs:
         assert upload['shelved'] == 'painting-2.png'
         assert (booth.rooms['footage'] / 'painting.png').read_bytes() == b'\x89PNG a painting'
         assert (booth.rooms['footage'] / upload['shelved']).read_bytes() == data
+
+
+class TestFaceJobRecovery:
+    """A queue/history loss must release the saved bench, not paint forever."""
+
+    @pytest.mark.parametrize('queue_key', ['queue_running', 'queue_pending'])
+    def test_a_job_on_either_queue_is_still_painting(self, booth, monkeypatch, queue_key):
+        def comfy(url, timeout=5):
+            if url.endswith('/queue'):
+                return {queue_key: [[3, 'p1', {}, {}]], 'other': []}
+            return {}
+        monkeypatch.setattr(server, 'http_json', comfy)
+        assert booth('GET', '/api/face/result/p1') == (200, {'state': 'painting'})
+
+    def test_a_job_missing_from_queue_and_history_is_lost(self, booth, monkeypatch):
+        monkeypatch.setattr(server, 'http_json', lambda url, timeout=5: {})
+        assert booth('GET', '/api/face/result/p1') == (200, {'state': 'lost'})
+
+    def test_completion_between_history_and_queue_is_not_reported_as_lost(self, booth, monkeypatch):
+        reads = 0
+        def comfy(url, timeout=5):
+            nonlocal reads
+            if url.endswith('/queue'):
+                return {'queue_running': [], 'queue_pending': []}
+            reads += 1
+            return {} if reads == 1 else {'p1': {'status': {'status_str': 'success'}, 'outputs': {'save': {'images': [{'filename': 'landed.png'}]}}}}
+        monkeypatch.setattr(server, 'http_json', comfy)
+        assert booth('GET', '/api/face/result/p1') == (200, {'state': 'done', 'images': ['landed.png']})
+        assert reads == 2
+
+    def test_an_unavailable_queue_is_a_retryable_failure_not_a_lost_job(self, booth, monkeypatch):
+        def comfy(url, timeout=5):
+            if url.endswith('/queue'):
+                raise OSError('dark')
+            return {}
+        monkeypatch.setattr(server, 'http_json', comfy)
+        status, reply = booth('GET', '/api/face/result/p1')
+        assert status == 502
+        assert 'not answering' in reply['error']
+
+    def test_cast_and_uploaded_stills_keep_ordinary_shelf_permissions(self, booth):
+        import stat
+        _, cast = cue(booth, '/api/stage/cast', {'image': 'painting.png'})
+        _, uploaded = cue(booth, '/api/footage/upload', {'name': 'brought.png', 'data': TestBringYourOwnStill.b64(TestBringYourOwnStill.PNG)})
+        for name in (cast['cast'], uploaded['shelved']):
+            assert stat.S_IMODE((booth.rooms['footage'] / name).stat().st_mode) == 0o644

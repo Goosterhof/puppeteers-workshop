@@ -52,7 +52,7 @@ whatever dependency versions it last saw — it sat eight commits behind and one
 ## Dedicated room flows — character refinement first (2026-10-08)
 
 All eleven tabs now carry their own task journey, defined in
-`front/src/lib/room-flows.ts` and rendered by `RoomFlow.vue`. The numbered
+`prompter-box/front/src/lib/room-flows.ts` and rendered by `RoomFlow.vue`. The numbered
 steps navigate to real controls and open their settings drawers; they never
 submit a cue or force a reader through a wizard. The Prompt Book's right
 rail, keyboard tab pattern and bottom Callboard remain the shell.
@@ -62,7 +62,11 @@ rail, keyboard tab pattern and bottom Callboard remain the shell.
   original comparison; a revision strip with direct refine, download and
   animate acts. The browser keeps up to 40 working versions, the original,
   draft and pending ComfyUI job ID in local storage. Reload observes the same
-  job rather than submitting another. The full archive remains The Canisters.
+  job rather than submitting another. A missing queue/history job settles as
+  lost; the visible Abandon act releases a dark or still-running painting
+  without dropping earlier versions, and late poll replies cannot restore it.
+  Re-clicking the sitter preserves lineage; starting a new character asks
+  before clearing it. The full archive remains The Canisters.
 - **Forge:** editable cue cards and a character-aware return from the Face
   Shop's brief helper. **Stage:** task-first playbill (animate, text video,
   motion transfer, advanced still painter), with technical settings in a
@@ -74,21 +78,28 @@ rail, keyboard tab pattern and bottom Callboard remain the shell.
   approved-prop search and paired mesh/painting downloads. **Night Shift:**
   explicit variants / subject-list entry (newlines or semicolons), kiln only,
   with a door to the Rack. **Canisters:** direct character refinement while
-  preserving the Light Table's no-scroll-on-mount law.
+  preserving the Light Table's no-scroll-on-mount law. Its flow sits inside
+  the measured shelf head, and media reserves the actual wrapped action
+  height so the print's acts stay above the footlight ledger.
 - **Understage:** the two native consoles are labelled Advanced and lead
   back to Canisters; their first-entry iframe behaviour is retained.
 
 Casting and uploads now publish complete files exclusively through one
 atomic shelf helper. Same-name results from different painters cannot
 replace each other or an existing character; identical casts reuse their
-copy. All model execution and fail-closed GPU guards retain their contracts.
+copy, with ordinary 0644 shelf permissions. Refinement shelves a sitter
+without selecting Stage's lead; explicit animation keeps its existing cue.
+Painter handoffs restore non-model settings even when the roster is dark,
+with a retry for the painter list. All model execution and fail-closed GPU
+guards retain their contracts.
 
 **Verification:** fixture tests and the dev-only browser witness are separate
 from live generation. Run `node front/scripts/witness-flows.mjs` from
 `prompter-box/` after building: it serves the actual static bundle through
 Playwright fixtures, sweeps eleven tabs at 1440/1000, exercises comparison,
 refinement, refresh, archive handoff and subject-list entry, and writes its
-screenshots under the system temp directory. `WORKSHOP_BROWSER` selects an
+screenshots in a unique directory under the system temp directory.
+`WORKSHOP_WITNESS_OUT` selects an explicit receipt directory. `WORKSHOP_BROWSER` selects an
 installed Chromium; optional `WORKSHOP_REFERENCE` / `WORKSHOP_RESULT` supply
 local WebP portraits. It starts no booth and runs no GPU jobs. Current
 source receipts and the PR own exact test counts. This flow arc has not
