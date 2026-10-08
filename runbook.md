@@ -180,7 +180,9 @@ never scrolls — the folio does.
   re-clicking the current sitter keeps its lineage. All earlier files remain
   in Canisters.
   Incoming characters from other rooms use the same confirmation and wait
-  behind a pending painting; their cue and source apply only after approval.
+  behind a pending painting and until Face Shop is visible; their cue and
+  source apply only after approval. A cue edited during the wait is retained
+  unless the Forge supplies an explicit replacement cue.
   The browser restores the latest 40 working versions and a pending painting
   after refresh through local storage (when the browser permits it). If a
   painting disappears from ComfyUI's queue and history, the bench releases it.
@@ -188,7 +190,9 @@ never scrolls — the folio does.
   keeping earlier versions; a running painting can still finish in Canisters.
   Canisters keeps its Pinboard on the shelf beside the mounted print (below
   it in narrow layouts). Naming a recipe opens a dialog; pins and shelf
-  scrolling do not shrink the print or hide its actions under the ledger.
+  scrolling do not change the print's height budget. Media keeps a 120px
+  minimum. At the witnessed 1000px window height the acts sit above the ledger;
+  shorter windows or taller captions may need folio scrolling to reach all acts.
   Models do not guarantee identity preservation: inspect the comparison. The Stage
   and Foley choose tasks before technical settings; Night Shift distinguishes
   variants from subject lists, and only queues kiln jobs. Prop Shelf exports

@@ -67,9 +67,12 @@ rail, keyboard tab pattern and bottom Callboard remain the shell.
   without dropping earlier versions, and late poll replies cannot restore it.
   Re-clicking the sitter preserves lineage; starting a new character asks
   before clearing it, including characters arriving from other rooms. An
-  incoming character waits for a pending painting to settle or be abandoned,
+  incoming character waits for a pending painting to settle or be abandoned
+  and for Face Shop to be visible before asking for replacement,
   preserving the old source and cue until replacement is approved. The full
   archive remains The Canisters.
+  A cue edited while a handoff waits is retained unless the handoff carries
+  an explicit new cue from the Forge.
 - **Forge:** editable cue cards and a character-aware return from the Face
   Shop's brief helper. **Stage:** task-first playbill (animate, text video,
   motion transfer, advanced still painter), with technical settings in a
@@ -85,8 +88,10 @@ rail, keyboard tab pattern and bottom Callboard remain the shell.
   the measured shelf head. The Pinboard sits alongside the print on the
   shelf (below it in narrow layouts); recipe naming opens a dialog. Media
   reserves the actual wrapped action height from the panel's normal position,
-  so scrolling or adding pins cannot change the print's height budget and its
-  acts stay above the footlight ledger.
+  so scrolling or adding pins cannot change the print's height budget. Acts
+  stay above the footlight ledger in the witnessed 1000px-high windows. The
+  media has a 120px minimum; shorter windows or taller captions can require
+  scrolling the folio to reach every act.
 - **Understage:** the two native consoles are labelled Advanced and lead
   back to Canisters; their first-entry iframe behaviour is retained.
 
@@ -104,7 +109,8 @@ guards retain their contracts.
 from live generation. Run `node front/scripts/witness-flows.mjs` from
 `prompter-box/` after building: it serves the actual static bundle through
 Playwright fixtures, sweeps eleven tabs at 1440/1000, exercises comparison,
-refinement, refresh, archive handoff, twelve-pin shelves, deep-scroll mounting,
+refinement, refresh, hidden-tab completion, queued-cue preservation, archive
+handoff, twelve-pin shelves, deep-scroll mounting,
 recipe naming and subject-list entry, and writes its
 screenshots in a unique directory under the system temp directory.
 `WORKSHOP_WITNESS_OUT` selects an explicit receipt directory. `WORKSHOP_BROWSER` selects an

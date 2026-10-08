@@ -2,7 +2,7 @@ import {mount} from '@vue/test-utils';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import FaceRoom from '../src/rooms/FaceRoom.vue';
 import {faceRecipeHandoff} from '../src/stores/pins';
-import {faceHandoff, facePrompt, faceSitter, forgeLead, pickedImage, refineStill, stagePrompt} from '../src/stores/booth';
+import {activeTab, faceHandoff, facePrompt, faceSitter, forgeLead, pickedImage, refineStill, stagePrompt} from '../src/stores/booth';
 
 // The Face Shop's contract (#00063 Phase 3): the sitter flips the room into
 // EDIT mode, the poll speaks 'painting', and a rejection names the brush.
@@ -22,6 +22,7 @@ const routes = (overrides: Record<string, unknown> = {}) => (path: string): Prom
 };
 
 const boot = async () => {
+    activeTab.value = 'face';
     const wrapper = mount(FaceRoom);
     await vi.advanceTimersByTimeAsync(0);
     return wrapper;
@@ -193,7 +194,7 @@ describe('FaceRoom — the character refinement loop', () => {
         await vi.advanceTimersByTimeAsync(0);
         expect(w.findAll('.revision')).toHaveLength(2);
         await w.findAll('.task-picks button').find(b => b.text() === 'Create a new still')!.trigger('click');
-        expect(w.get<HTMLDialogElement>('dialog').element.open).toBe(true);
+        expect(w.get<HTMLDialogElement>('#face-new-dialog').element.open).toBe(true);
         expect(w.findAll('.revision')).toHaveLength(2);
         await w.findAll('dialog button').find(b => b.text() === 'Keep this character')!.trigger('click');
         expect(w.findAll('.revision')).toHaveLength(2);
@@ -278,7 +279,7 @@ describe('FaceRoom — the character refinement loop', () => {
         w.unmount();
     });
 
-    it('an incoming character queues behind a painting and asks before replacing its completed lineage', async () => {
+    it('an incoming character waits for the painting and the Face tab before asking to replace its completed lineage', async () => {
         const w = await boot();
         facePrompt.value = 'the current character';
         await w.get('#face-go').trigger('click');
@@ -286,10 +287,15 @@ describe('FaceRoom — the character refinement loop', () => {
         await vi.advanceTimersByTimeAsync(0);
         expect(faceSitter.value).toBe('crier.png');
         expect(facePrompt.value).toBe('the current character');
-        expect(w.get<HTMLDialogElement>('dialog').element.open).toBe(false);
+        expect(w.get<HTMLDialogElement>('#face-new-dialog').element.open).toBe(false);
+        activeTab.value = 'archive';
         apiMock.mockImplementation(routes({'/api/face/result/p1': {state: 'done', images: ['first.png']}}));
         await vi.advanceTimersByTimeAsync(1500);
-        expect(w.get<HTMLDialogElement>('dialog').element.open).toBe(true);
+        expect(w.get<HTMLDialogElement>('#face-new-dialog').element.open).toBe(false);
+        expect(faceHandoff.value?.source).toBe('different.png');
+        activeTab.value = 'face';
+        await vi.advanceTimersByTimeAsync(0);
+        expect(w.get<HTMLDialogElement>('#face-new-dialog').element.open).toBe(true);
         expect(w.get('.mount-title').text()).toBe('the current character');
         expect(w.get('.comparison-reference img').attributes('src')).toBe('/footage/crier.png');
         await w.findAll('dialog button').find(b => b.text() === 'Keep this character')!.trigger('click');
@@ -303,6 +309,24 @@ describe('FaceRoom — the character refinement loop', () => {
         expect(facePrompt.value).toBe('the next character');
         expect(w.findAll('.revision')).toHaveLength(1);
         expect(w.get<HTMLInputElement>('#face-seed').element.value).toBe('0');
+        w.unmount();
+    });
+
+    it('a queued handoff without confirmation preserves a cue edited during the wait', async () => {
+        const w = await boot();
+        facePrompt.value = 'the running change';
+        await w.get('#face-go').trigger('click');
+        await refineStill({room: 'footage', name: 'crier.png'}, {}, true);
+        facePrompt.value = 'the next change typed while waiting';
+        activeTab.value = 'stage';
+        apiMock.mockImplementation(routes({'/api/face/result/p1': {state: 'done', images: ['first.png']}}));
+        await vi.advanceTimersByTimeAsync(1500);
+        activeTab.value = 'face';
+        await vi.advanceTimersByTimeAsync(0);
+        expect(faceHandoff.value).toBeNull();
+        expect(facePrompt.value).toBe('the next change typed while waiting');
+        expect(w.get<HTMLDialogElement>('#face-new-dialog').element.open).toBe(false);
+        expect(w.get('.mount-title').text()).toBe('the running change');
         w.unmount();
     });
 

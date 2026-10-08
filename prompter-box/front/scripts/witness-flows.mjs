@@ -39,6 +39,7 @@ try {
         const errors = [];
         const posts = [];
         let painted = false;
+        let holdPainting = false;
         page.on('pageerror', e => errors.push(e.message));
         await page.route('**/*', async route => {
             const req = route.request();
@@ -60,7 +61,7 @@ try {
             if (path === '/api/forge/models') return json({models: []});
             if (path === '/api/foley/sources') return json({stage: ['motion.mp4'], footage: []});
             if (path === '/api/archive') return json({face: painted ? [{name: 'refined.png', kind: 'image', mtime: Date.now()/1000, meta: {prompt: 'sharpen the grin', model: 'flux-2-klein-9b', seed: 7}}, ...Array.from({length: 20}, (_, i) => ({name: `older-${i}.png`, kind: 'image', mtime: Date.now()/1000-i-1, meta: {prompt: 'keep the character and costume while changing the expression; compare the silhouette and lighting before choosing this take', model: 'flux-2-klein-9b', seed: i}}))] : [], stage: [], foley: []});
-            if (path.startsWith('/api/face/result/')) return json({state: 'done', images: ['refined.png']});
+            if (path.startsWith('/api/face/result/')) return json(holdPainting ? {state: 'painting'} : {state: 'done', images: ['refined.png']});
             if (path === '/api/pins') return json({pins: Array.from({length: 12}, (_, i) => ({id: `pin-${i}`, name: `Proven face ${i}`, room: 'face', recipe: {prompt: 'a proven cue', seed: i, model: 'flux-2-klein-9b'}}))});
             if (path === '/api/rack/list') return json({candidates: []});
             if (path === '/api/shelf/list') return json({props: []});
@@ -167,6 +168,42 @@ try {
         const backPrint = await readPrint();
         assert.equal(deepPrint.budget, backPrint.budget, `Print size depended on scroll at ${width}`);
         assert.ok(backPrint.picture >= 120 && backPrint.acts <= backPrint.limit, `Print disappeared after returning to top at ${width}`);
+        // A completion on another tab must never open an invisible modal.
+        await page.locator('[data-tab="face"]').click();
+        await page.locator('#face-prompt').fill('another painted change');
+        holdPainting = true;
+        await page.locator('#face-go').click();
+        await page.locator('#face-abandon').waitFor();
+        await page.locator('[data-tab="archive"]').click();
+        await page.getByRole('button', {name: 'Refine this character →', exact: true}).click();
+        await page.locator('#face-prompt').fill('a cue edited while the replacement waits');
+        await page.locator('[data-tab="stage"]').click();
+        holdPainting = false;
+        await page.waitForFunction(() => !document.querySelector('#face-abandon'));
+        assert.equal(await page.locator('#panel-face dialog[open]').count(), 0);
+        await page.locator('[data-tab="forge"]').click();
+        await page.locator('#panel-forge').waitFor({state: 'visible'});
+        await page.locator('[data-tab="face"]').click();
+        await page.locator('#face-new-dialog[open]').waitFor({state: 'visible'});
+        await page.getByRole('button', {name: 'Keep this character', exact: true}).click();
+        assert.equal(await page.locator('#face-prompt').inputValue(), 'a cue edited while the replacement waits');
+        // A known version needs no reset dialog and keeps a later typed cue.
+        holdPainting = true;
+        await page.locator('#face-go').click();
+        await page.locator('#face-abandon').waitFor();
+        await page.locator('[data-tab="archive"]').click();
+        await page.locator('.canister').first().evaluate(el => el.click());
+        await page.getByRole('button', {name: 'Refine this character →', exact: true}).click();
+        await page.locator('#face-prompt').fill('the next change typed during painting');
+        await page.locator('[data-tab="stage"]').click();
+        holdPainting = false;
+        await page.waitForFunction(() => !document.querySelector('#face-abandon'));
+        await page.locator('[data-tab="face"]').click();
+        assert.equal(await page.locator('#panel-face dialog[open]').count(), 0);
+        assert.equal(await page.locator('#face-prompt').inputValue(), 'the next change typed during painting');
+        groups++;
+        await page.locator('[data-tab="archive"]').click();
+        await page.locator('.canister').nth(1).evaluate(el => el.click());
         await page.getByRole('button', {name: 'Refine this character →', exact: true}).click();
         await page.locator('#panel-face').waitFor({state: 'visible'});
         await page.getByRole('button', {name: 'Start new bench', exact: true}).click();

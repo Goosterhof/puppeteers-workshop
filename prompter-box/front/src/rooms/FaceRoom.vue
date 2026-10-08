@@ -10,7 +10,7 @@ import type {JobPoller} from '../composables/useJobPoller';
 import {readFaceWorkbench, saveFaceWorkbench, stillUrl} from '../lib/face-workbench';
 import type {FaceRecipe, FaceRevision, StillAsset} from '../lib/face-workbench';
 import {loadArchive} from '../stores/archive';
-import {castAsLead, faceHandoff, facePrompt, faceSitter, forgeIdea, forgeLead, forgeTarget, leadRes, openTab, refineStill, stageTaskHandoff} from '../stores/booth';
+import {activeTab, castAsLead, faceHandoff, facePrompt, faceSitter, forgeIdea, forgeLead, forgeTarget, leadRes, openTab, refineStill, stageTaskHandoff} from '../stores/booth';
 import {faceRecipeHandoff} from '../stores/pins';
 
 defineOptions({inheritAttrs: false});
@@ -134,13 +134,18 @@ watch(faceRecipeHandoff, handoff => {
     applyRecipe(handoff.recipe);
     faceRecipeHandoff.value = null;
 }, {immediate: true});
-watch([faceHandoff, busy, pending, transferring], ([handoff]) => {
-    if (!handoff || busy.value || pending.value || transferring.value) return;
+function handoffBrief(handoff: NonNullable<typeof faceHandoff.value>) {
+    if (handoff.prompt) return handoff.prompt;
+    if (handoff.queuedPrompt === undefined || handoff.queuedPrompt === facePrompt.value) return '';
+    return undefined;
+}
+watch([faceHandoff, busy, pending, transferring, activeTab], ([handoff]) => {
+    if (!handoff || busy.value || pending.value || transferring.value || activeTab.value !== 'face') return;
     const knownVersion = handoff.asset.room === 'face' && revisions.value.some(r => r.name === handoff.asset.name);
     // The old cue belongs to the old take; the handoff's explicit cue is the next one.
     const {prompt: _previousPrompt, ...knobs} = handoff.recipe;
     requestBench({source: handoff.source, original: handoff.asset,
-        resetHistory: !handoff.keepHistory && !knownVersion, recipe: knobs, prompt: handoff.prompt ?? ''});
+        resetHistory: !handoff.keepHistory && !knownVersion, recipe: knobs, prompt: handoffBrief(handoff)});
     faceHandoff.value = null;
 }, {immediate: true});
 
@@ -348,7 +353,7 @@ onMounted(async () => {
     </section>
     </div>
   </div>
-  <dialog ref="resetDialog" class="take-bin" @cancel="cancelNewBench">
+  <dialog id="face-new-dialog" ref="resetDialog" class="take-bin" @cancel="cancelNewBench">
     <h2>Start a new character bench?</h2>
     <p>This clears the working versions and their recipes from this bench. The paintings remain in The Canisters.</p>
     <div class="acts">

@@ -26,17 +26,18 @@ export const stageTaskHandoff = ref<string | null>(null);
 export const facePrompt = ref('');
 export const forgeIdea = ref('');
 export const forgeTarget = ref('wan');
-export const faceHandoff = ref<{asset: StillAsset; source: string; recipe: Record<string, unknown>; keepHistory: boolean; prompt?: string} | null>(null);
+export const faceHandoff = ref<{asset: StillAsset; source: string; recipe: Record<string, unknown>; keepHistory: boolean; prompt?: string; queuedPrompt?: string} | null>(null);
 
 // A result becomes the next sitter through the same guarded casting hatch.
 // Carry its origin and recipe too; a filename alone loses the work's context.
 export async function refineStill(asset: StillAsset, recipe: Record<string, unknown> = {}, keepHistory = false, prompt = ''): Promise<void> {
+    const queuedPrompt = facePrompt.value;
     const source = asset.room === 'footage' ? asset.name : await shelvePainting(asset.name, asset.room);
     if (asset.room === 'stage') {
         recipe = {...recipe};
         delete recipe.model;
     }
-    faceHandoff.value = {asset, source, recipe, keepHistory, prompt};
+    faceHandoff.value = {asset, source, recipe, keepHistory, prompt, queuedPrompt};
     openTab('face');
 }
 
