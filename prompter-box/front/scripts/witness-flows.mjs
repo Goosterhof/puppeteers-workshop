@@ -61,7 +61,7 @@ try {
             if (path === '/api/foley/sources') return json({stage: ['motion.mp4'], footage: []});
             if (path === '/api/archive') return json({face: painted ? [{name: 'refined.png', kind: 'image', mtime: Date.now()/1000, meta: {prompt: 'sharpen the grin', model: 'flux-2-klein-9b', seed: 7}}, ...Array.from({length: 20}, (_, i) => ({name: `older-${i}.png`, kind: 'image', mtime: Date.now()/1000-i-1, meta: {prompt: 'keep the character and costume while changing the expression; compare the silhouette and lighting before choosing this take', model: 'flux-2-klein-9b', seed: i}}))] : [], stage: [], foley: []});
             if (path.startsWith('/api/face/result/')) return json({state: 'done', images: ['refined.png']});
-            if (path === '/api/pins') return json({pins: []});
+            if (path === '/api/pins') return json({pins: Array.from({length: 12}, (_, i) => ({id: `pin-${i}`, name: `Proven face ${i}`, room: 'face', recipe: {prompt: 'a proven cue', seed: i, model: 'flux-2-klein-9b'}}))});
             if (path === '/api/rack/list') return json({candidates: []});
             if (path === '/api/shelf/list') return json({props: []});
             if (path === '/api/queue/list') return json({rows: [], shift: {running: false}});
@@ -135,9 +135,20 @@ try {
         await page.locator('.canister').first().evaluate(el => el.click());
         await page.locator('.bench .mount-frame img').waitFor();
         await page.locator('.bench .mount-frame img').evaluate(async img => { await img.decode(); });
-        const geometry = await page.locator('.bench .mount-acts').evaluate(el => ({top: el.getBoundingClientRect().top, bottom: el.getBoundingClientRect().bottom, limit: document.querySelector('.deck').getBoundingClientRect().bottom}));
+        const readPrint = () => page.locator('.bench').evaluate(el => ({
+            picture: el.querySelector('img').getBoundingClientRect().height,
+            budget: Number.parseFloat(getComputedStyle(el.closest('.light-table')).getPropertyValue('--bench-media-height')),
+            acts: el.querySelector('.mount-acts').getBoundingClientRect().bottom,
+            limit: document.querySelector('.deck').getBoundingClientRect().bottom,
+        }));
+        const geometry = await readPrint();
         await page.screenshot({path: join(out, `canisters-actions-${width}.png`)});
-        assert.ok(geometry.top >= 0 && geometry.bottom <= geometry.limit, `Canisters actions hidden at ${width}: ${JSON.stringify(geometry)}`);
+        assert.ok(geometry.picture >= 120 && geometry.acts <= geometry.limit, `Canisters picture/actions hidden with 12 pins at ${width}: ${JSON.stringify(geometry)}`);
+        await page.getByRole('button', {name: 'Pin this recipe…', exact: true}).click();
+        const naming = page.locator('dialog.pin-naming[open]');
+        await naming.waitFor();
+        assert.ok(await naming.evaluate(el => el.getBoundingClientRect().bottom <= innerHeight));
+        await naming.getByRole('button', {name: 'Cancel', exact: true}).click();
         const scroll = await page.locator('.deck').evaluate(el => el.scrollTop);
         // Playwright's actionability scroll would move a narrow folded shelf
         // before a second click. Dispatch the mount itself to measure the app.
@@ -145,14 +156,20 @@ try {
         assert.equal(await page.locator('.deck').evaluate(el => el.scrollTop), scroll);
         // A changed caption/media height must also preserve a reader's place
         // halfway down a real shelf, after ResizeObserver and layout settle.
-        await page.locator('.deck').evaluate(el => { el.scrollTop = 180; });
+        await page.locator('.deck').evaluate(el => { el.scrollTop = 900; });
         const deepScroll = await page.locator('.deck').evaluate(el => el.scrollTop);
         assert.ok(deepScroll > 0);
         await page.locator('.canister').nth(1).evaluate(el => el.click());
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         assert.equal(await page.locator('.deck').evaluate(el => el.scrollTop), deepScroll, `Mount moved the shelf at ${width}`);
+        const deepPrint = await readPrint();
+        await page.locator('.deck').evaluate(el => { el.scrollTop = 0; });
+        const backPrint = await readPrint();
+        assert.equal(deepPrint.budget, backPrint.budget, `Print size depended on scroll at ${width}`);
+        assert.ok(backPrint.picture >= 120 && backPrint.acts <= backPrint.limit, `Print disappeared after returning to top at ${width}`);
         await page.getByRole('button', {name: 'Refine this character →', exact: true}).click();
         await page.locator('#panel-face').waitFor({state: 'visible'});
+        await page.getByRole('button', {name: 'Start new bench', exact: true}).click();
         groups++;
         assert.deepEqual(errors, []);
         await context.close();

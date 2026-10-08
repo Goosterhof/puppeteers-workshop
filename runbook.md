@@ -179,13 +179,17 @@ never scrolls — the folio does.
   starts another working character after confirmation if versions are tracked;
   re-clicking the current sitter keeps its lineage. All earlier files remain
   in Canisters.
+  Incoming characters from other rooms use the same confirmation and wait
+  behind a pending painting; their cue and source apply only after approval.
   The browser restores the latest 40 working versions and a pending painting
   after refresh through local storage (when the browser permits it). If a
   painting disappears from ComfyUI's queue and history, the bench releases it.
   **Abandon this painting** also frees the bench during an outage while
   keeping earlier versions; a running painting can still finish in Canisters.
-  Models
-  do not guarantee identity preservation: inspect the comparison. The Stage
+  Canisters keeps its Pinboard on the shelf beside the mounted print (below
+  it in narrow layouts). Naming a recipe opens a dialog; pins and shelf
+  scrolling do not shrink the print or hide its actions under the ledger.
+  Models do not guarantee identity preservation: inspect the comparison. The Stage
   and Foley choose tasks before technical settings; Night Shift distinguishes
   variants from subject lists, and only queues kiln jobs. Prop Shelf exports
   an approved mesh and its painting. The native consoles remain under

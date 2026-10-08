@@ -67,8 +67,8 @@ function cueStage(card: CueCard) {
     openTab('stage');
 }
 async function cueFace(card: CueCard) {
-    if (card.lead) await refineStill({room: 'footage', name: card.lead}, {}, card.lead === faceSitter.value);
-    facePrompt.value = card.text;
+    if (card.lead) await refineStill({room: 'footage', name: card.lead}, {}, card.lead === faceSitter.value, card.text);
+    else facePrompt.value = card.text;
     openTab('face');
 }
 const pickLead = (name: string) => {

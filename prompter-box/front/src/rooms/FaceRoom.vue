@@ -63,36 +63,52 @@ watch(faceSitter, source => {
     }
 });
 
+interface CharacterChange {
+    source: string | null;
+    original: StillAsset | null;
+    resetHistory: boolean;
+    recipe?: Record<string, unknown>;
+    prompt?: string;
+}
 const resetDialog = ref<HTMLDialogElement | null>(null);
-let nextCharacter: string | null = null;
-function startBench(name: string | null) {
-    faceSitter.value = name;
-    mode.value = name ? 'refine' : 'create';
-    original.value = name ? {room: 'footage', name} : null;
-    revisions.value = [];
-    selected.value = null;
-    changeKeep.value = '';
+let nextCharacter: CharacterChange | null = null;
+function startBench(change: CharacterChange) {
+    faceSitter.value = change.source;
+    mode.value = change.source ? 'refine' : 'create';
+    if (change.resetHistory) {
+        original.value = change.original;
+        revisions.value = [];
+        selected.value = null;
+        changeKeep.value = '';
+    }
+    if (change.recipe) { formulaNote.value = ''; applyRecipe(change.recipe); }
+    if (change.prompt !== undefined) facePrompt.value = change.prompt;
     error.value = '';
 }
-function requestBench(name: string | null) {
+function requestBench(change: CharacterChange) {
     if (busy.value || pending.value || transferring.value) return;
-    if (revisions.value.length) {
-        nextCharacter = name;
+    if (change.resetHistory && revisions.value.length) {
+        nextCharacter = change;
         resetDialog.value?.showModal();
-    } else startBench(name);
+    } else startBench(change);
+}
+function cancelNewBench() {
+    nextCharacter = null;
+    resetDialog.value?.close();
 }
 function confirmNewBench() {
-    resetDialog.value?.close();
-    if (!busy.value && !pending.value && !transferring.value) startBench(nextCharacter);
+    const change = nextCharacter;
+    cancelNewBench();
+    if (change && !busy.value && !pending.value && !transferring.value) startBench(change);
 }
 function chooseMode(next: string) {
     if (next === mode.value) return;
-    if (next === 'create') requestBench(null);
+    if (next === 'create') requestBench({source: null, original: null, resetHistory: true});
     else mode.value = 'refine';
 }
 function pickSitter(name: string) {
     if (name === faceSitter.value) return;
-    requestBench(name);
+    requestBench({source: name, original: {room: 'footage', name}, resetHistory: true});
 }
 function matchRequestedPainter() {
     if (!paintersReady.value || !requestedPainter.value) return;
@@ -101,7 +117,7 @@ function matchRequestedPainter() {
     if (match) { painter.value = match; requestedPainter.value = ''; }
     else formulaNote.value = `The recipe's painter “${name}” is absent. Choose an available painter in Advanced settings.`;
 }
-watch([requestedPainter, paintersReady], matchRequestedPainter);
+watch(paintersReady, matchRequestedPainter);
 function applyRecipe(r: Record<string, unknown>) {
     if (typeof r.prompt === 'string') facePrompt.value = r.prompt;
     if (r.seed !== undefined && Number.isFinite(Number(r.seed))) seed.value = Number(r.seed);
@@ -109,7 +125,8 @@ function applyRecipe(r: Record<string, unknown>) {
         const [w, h] = r.resolution.split('x').map(Number);
         if (w && h) { width.value = w; height.value = h; }
     }
-    if (typeof r.model === 'string') requestedPainter.value = r.model.replace(/\.(gguf|safetensors)$/i, '');
+    requestedPainter.value = typeof r.model === 'string' ? r.model.replace(/\.(gguf|safetensors)$/i, '') : '';
+    matchRequestedPainter();
 }
 watch(faceRecipeHandoff, handoff => {
     if (!handoff) return;
@@ -117,18 +134,13 @@ watch(faceRecipeHandoff, handoff => {
     applyRecipe(handoff.recipe);
     faceRecipeHandoff.value = null;
 }, {immediate: true});
-watch(faceHandoff, handoff => {
-    if (!handoff) return;
-    if (!handoff.keepHistory && !revisions.value.some(r => r.name === handoff.asset.name && handoff.asset.room === 'face')) {
-        original.value = handoff.asset;
-        revisions.value = [];
-        selected.value = null;
-    }
-    // Carry the settings, but ask for a new change rather than applying the old change twice.
+watch([faceHandoff, busy, pending, transferring], ([handoff]) => {
+    if (!handoff || busy.value || pending.value || transferring.value) return;
+    const knownVersion = handoff.asset.room === 'face' && revisions.value.some(r => r.name === handoff.asset.name);
+    // The old cue belongs to the old take; the handoff's explicit cue is the next one.
     const {prompt: _previousPrompt, ...knobs} = handoff.recipe;
-    applyRecipe(knobs);
-    faceSitter.value = handoff.source;
-    mode.value = 'refine';
+    requestBench({source: handoff.source, original: handoff.asset,
+        resetHistory: !handoff.keepHistory && !knownVersion, recipe: knobs, prompt: handoff.prompt ?? ''});
     faceHandoff.value = null;
 }, {immediate: true});
 
@@ -303,6 +315,7 @@ onMounted(async () => {
       <button id="face-abandon" class="act" @click="abandonPainting">Abandon this painting</button>
       <p>This releases the bench and keeps your versions. A painting still running may finish in The Canisters.</p>
     </div>
+    <p v-if="faceHandoff && pending" class="note">Another character is waiting for this bench. Finish or abandon the current painting before choosing it.</p>
     <p v-show="error" class="error" role="alert">{{ error }}</p>
     </div>
     <div class="face-output">
@@ -335,11 +348,11 @@ onMounted(async () => {
     </section>
     </div>
   </div>
-  <dialog ref="resetDialog" class="take-bin" @cancel="nextCharacter = null">
+  <dialog ref="resetDialog" class="take-bin" @cancel="cancelNewBench">
     <h2>Start a new character bench?</h2>
     <p>This clears the working versions and their recipes from this bench. The paintings remain in The Canisters.</p>
     <div class="acts">
-      <button class="act" @click="resetDialog?.close()">Keep this character</button>
+      <button class="act" @click="cancelNewBench">Keep this character</button>
       <button id="face-new-confirm" class="fire" @click="confirmNewBench">Start new bench</button>
     </div>
   </dialog>

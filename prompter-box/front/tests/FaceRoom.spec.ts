@@ -278,6 +278,34 @@ describe('FaceRoom — the character refinement loop', () => {
         w.unmount();
     });
 
+    it('an incoming character queues behind a painting and asks before replacing its completed lineage', async () => {
+        const w = await boot();
+        facePrompt.value = 'the current character';
+        await w.get('#face-go').trigger('click');
+        await refineStill({room: 'footage', name: 'different.png'}, {}, false, 'the next character');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(faceSitter.value).toBe('crier.png');
+        expect(facePrompt.value).toBe('the current character');
+        expect(w.get<HTMLDialogElement>('dialog').element.open).toBe(false);
+        apiMock.mockImplementation(routes({'/api/face/result/p1': {state: 'done', images: ['first.png']}}));
+        await vi.advanceTimersByTimeAsync(1500);
+        expect(w.get<HTMLDialogElement>('dialog').element.open).toBe(true);
+        expect(w.get('.mount-title').text()).toBe('the current character');
+        expect(w.get('.comparison-reference img').attributes('src')).toBe('/footage/crier.png');
+        await w.findAll('dialog button').find(b => b.text() === 'Keep this character')!.trigger('click');
+        expect(faceSitter.value).toBe('crier.png');
+        expect(facePrompt.value).toBe('the current character');
+        expect(w.findAll('.revision')).toHaveLength(2);
+        await refineStill({room: 'footage', name: 'different.png'}, {seed: 0}, false, 'the next character');
+        await vi.advanceTimersByTimeAsync(0);
+        await w.get('#face-new-confirm').trigger('click');
+        expect(faceSitter.value).toBe('different.png');
+        expect(facePrompt.value).toBe('the next character');
+        expect(w.findAll('.revision')).toHaveLength(1);
+        expect(w.get<HTMLInputElement>('#face-seed').element.value).toBe('0');
+        w.unmount();
+    });
+
     it('animating a character keeps the motion cue already on Stage', async () => {
         stagePrompt.value = 'a measured bow';
         apiMock.mockImplementation(routes({'/api/face/result/p1': {state: 'done', images: ['first.png']}, '/api/stage/cast': {cast: 'first.png'}, '/api/footage': {images: ['first.png']}}));
@@ -326,6 +354,33 @@ describe('FaceRoom — proven recipe replay', () => {
         expect(apiMock).toHaveBeenCalledWith('/api/face/generate', expect.objectContaining({model: 'flux-2-dev.gguf', seed: 0, prompt: 'a challenging grin'}));
         w.unmount();
     });
+    it('a repeated missing painter reports its absence for each recipe, and a later model-free recipe cancels it', async () => {
+        const w = await boot();
+        faceRecipeHandoff.value = {name: 'Missing first', recipe: {prompt: 'first', model: 'absent'}};
+        await vi.advanceTimersByTimeAsync(0);
+        expect(w.text()).toContain('painter “absent” is absent');
+        faceRecipeHandoff.value = {name: 'Missing again', recipe: {prompt: 'second', model: 'absent'}};
+        await vi.advanceTimersByTimeAsync(0);
+        expect(w.text()).toContain('painter “absent” is absent');
+        faceRecipeHandoff.value = {name: 'Only a cue', recipe: {prompt: 'third', seed: 0}};
+        await vi.advanceTimersByTimeAsync(0);
+        expect(w.text()).not.toContain('painter “absent” is absent');
+        w.unmount();
+    });
+
+    it('a model-free recipe cancels the earlier painter request before an outage retry', async () => {
+        apiMock.mockImplementation(path => path === '/api/face/models' ? Promise.reject(new Error('dark')) : routes()(path));
+        const w = await boot();
+        faceRecipeHandoff.value = {name: 'Only a cue', recipe: {prompt: 'the later cue', seed: 0}};
+        await vi.advanceTimersByTimeAsync(0);
+        apiMock.mockImplementation(routes());
+        await w.findAll('button').find(b => b.text() === 'Retry painter list')!.trigger('click');
+        await vi.advanceTimersByTimeAsync(0);
+        await w.get('#face-go').trigger('click');
+        expect(apiMock).toHaveBeenCalledWith('/api/face/generate', expect.objectContaining({model: 'flux-2-klein-9b.gguf', prompt: 'the later cue', seed: 0}));
+        w.unmount();
+    });
+
     it('a character handoff reaches the easel even when its model roster is dark', async () => {
         faceRecipeHandoff.value = null;
         faceHandoff.value = {asset: {room: 'face', name: 'original.png'}, source: 'original-copy.png', recipe: {seed: 0}, keepHistory: false};
