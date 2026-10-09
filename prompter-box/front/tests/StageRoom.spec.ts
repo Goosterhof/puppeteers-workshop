@@ -1,7 +1,7 @@
 import {mount} from '@vue/test-utils';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import StageRoom from '../src/rooms/StageRoom.vue';
-import {leadRes, pickedImage, stagePrompt} from '../src/stores/booth';
+import {leadRes, pickedImage, stagePrompt, stageTaskHandoff} from '../src/stores/booth';
 
 // The Stage's contract (#00063 Phase 3): the playbill drives the form, the
 // wardrobe rides the payload, and every refusal voices the old front's words.
@@ -57,6 +57,7 @@ describe('StageRoom', () => {
         stagePrompt.value = '';
         pickedImage.value = null;
         leadRes.value = null;
+        stageTaskHandoff.value = null;
     });
     afterEach(() => {
         vi.useRealTimers();
@@ -81,6 +82,7 @@ describe('StageRoom', () => {
 
     it('a swap cue without choreography names the performer', async () => {
         const wrapper = await boot();
+        await wrapper.findAll('#stage-task button').find(b => b.text() === 'Transfer motion')!.trigger('click');
         await pick(wrapper, 'stage-model', 'SCAIL-2 · motion transfer');
         pickedImage.value = 'crier.png';
         await wrapper.find('#stage-go').trigger('click');
@@ -120,9 +122,25 @@ describe('StageRoom', () => {
 
     it('a t2i performer swaps frames for strength', async () => {
         const wrapper = await boot();
+        await wrapper.findAll('#stage-task button').find(b => b.text() === 'Advanced still painter')!.trigger('click');
         await pick(wrapper, 'stage-model', 'Krea 2 · text → image');
         expect(wrapper.find('#stage-len-wrap').isVisible()).toBe(false);
+        (wrapper.find('.room-settings').element as HTMLDetailsElement).open = true;
         expect(wrapper.find('#stage-strength-wrap').isVisible()).toBe(true);
         wrapper.unmount();
     });
+    it('an animation handoff leaves a previous still painter and matches the lead after motion defaults', async () => {
+        const wrapper = await boot();
+        await wrapper.findAll('#stage-task button').find(b => b.text() === 'Advanced still painter')!.trigger('click');
+        await vi.advanceTimersByTimeAsync(0);
+        pickedImage.value = 'new-character.png';
+        stageTaskHandoff.value = 'i2v';
+        leadRes.value = {w: 1920, h: 1080};
+        await vi.advanceTimersByTimeAsync(0);
+        await wrapper.find('#stage-go').trigger('click');
+        expect(apiMock).toHaveBeenCalledWith('/api/stage/generate', expect.objectContaining({model_type: 'i2v_14b', image: 'new-character.png', resolution: '1280x720', video_length: 41}));
+        expect(stageTaskHandoff.value).toBeNull();
+        wrapper.unmount();
+    });
+
 });

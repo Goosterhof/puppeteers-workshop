@@ -3,6 +3,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import StampedMount from '../src/components/StampedMount.vue';
 import ArchiveRoom from '../src/rooms/ArchiveRoom.vue';
 import {archive} from '../src/stores/archive';
+import {stagePrompt} from '../src/stores/booth';
 import {pins} from '../src/stores/pins';
 
 // Chaos #00085 detonation 3: the archive mount is a Print like every fresh
@@ -85,6 +86,22 @@ describe('ArchiveRoom', () => {
         expect(act.text()).toBe('Cue copied');
         vi.unstubAllGlobals();
         wrapper.unmount();
+    });
+
+    it('sending a painting to Stage preserves an existing motion brief', async () => {
+        stagePrompt.value = 'the character gives a small bow';
+        apiMock.mockImplementation(path => {
+            if (path === '/api/archive') return Promise.resolve({stage: [], foley: [], face: [{name: 'character.png', kind: 'image', mtime: threeHoursAgo(), meta: {prompt: 'a grin'}}]});
+            if (path === '/api/stage/cast') return Promise.resolve({cast: 'character.png'});
+            if (path === '/api/footage') return Promise.resolve({images: ['character.png']});
+            return Promise.resolve({pins: []});
+        });
+        const w = mount(ArchiveRoom, {props: {active: true}});
+        await vi.advanceTimersByTimeAsync(0);
+        await w.get('.canister').trigger('click');
+        await w.findAll('.mount-acts button').find(b => b.text() === 'Send to the stage →')!.trigger('click');
+        expect(stagePrompt.value).toBe('the character gives a small bow');
+        w.unmount();
     });
 
     it('pins a mounted recipe onto the board — settings only, no file-facts (#08)', async () => {

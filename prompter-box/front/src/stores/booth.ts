@@ -1,6 +1,7 @@
 import {ref} from 'vue';
 import {api} from '../composables/useBoothApi';
 import {readStill} from '../lib/still';
+import type {StillAsset} from '../lib/face-workbench';
 
 // The booth's shared state — the module-global era's cross-room wires
 // (forgeLead, pickedImage, faceSitter, the footage shelf, tab navigation)
@@ -21,7 +22,24 @@ export const faceSitter = ref<string | null>(null);
 // The cues in flight — "Cue the stage →" and "Cue the face shop →" write
 // into another room's prompt box, so the boxes live here.
 export const stagePrompt = ref('');
+export const stageTaskHandoff = ref<string | null>(null);
 export const facePrompt = ref('');
+export const forgeIdea = ref('');
+export const forgeTarget = ref('wan');
+export const faceHandoff = ref<{asset: StillAsset; source: string; recipe: Record<string, unknown>; keepHistory: boolean; prompt?: string; queuedPrompt?: string} | null>(null);
+
+// A result becomes the next sitter through the same guarded casting hatch.
+// Carry its origin and recipe too; a filename alone loses the work's context.
+export async function refineStill(asset: StillAsset, recipe: Record<string, unknown> = {}, keepHistory = false, prompt = ''): Promise<void> {
+    const queuedPrompt = facePrompt.value;
+    const source = asset.room === 'footage' ? asset.name : await shelvePainting(asset.name, asset.room);
+    if (asset.room === 'stage') {
+        recipe = {...recipe};
+        delete recipe.model;
+    }
+    faceHandoff.value = {asset, source, recipe, keepHistory, prompt, queuedPrompt};
+    openTab('face');
+}
 
 // A cast lead's natural size, parked for the Stage's resolution matcher —
 // consumed when the Stage room rises in Phase 3.
@@ -54,10 +72,17 @@ export async function shelveStill(file: File): Promise<string> {
     return shelved;
 }
 
-// Cast a still into footage/ and make it the standing lead everywhere.
-export async function castAsLead(image: string, from?: string): Promise<string> {
+// Shelving a painting does not choose another room's character.
+export async function shelvePainting(image: string, from?: string): Promise<string> {
     const {cast} = await api<{cast: string}>('/api/stage/cast', from ? {image, from} : {image});
+    await loadFootage();
+    return cast;
+}
+
+// Explicit Stage casting also selects the shared lead.
+export async function castAsLead(image: string, from?: string): Promise<string> {
+    const cast = await shelvePainting(image, from);
     forgeLead.value = cast;
-    await loadFootage(cast);
+    pickedImage.value = cast;
     return cast;
 }

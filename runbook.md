@@ -170,6 +170,35 @@ container would clip the jut), typed footlight ledger along the bottom
 (LIVE by value, no pulse; same heartbeat/evict contract). The window
 never scrolls — the folio does.
 
+- **Dedicated room flows (2026-10-08)** — each tab now opens with its own
+  numbered journey. The steps focus real controls; drawers open when needed,
+  and no step starts a job. Face Shop's main loop is choose character → change
+  brief → paint → compare → choose the next version. Use **Refine this
+  version** or **Refine the original** to branch without re-uploading; use
+  **Animate this version** when the still is ready. Picking a different still
+  starts another working character after confirmation if versions are tracked;
+  re-clicking the current sitter keeps its lineage. All earlier files remain
+  in Canisters.
+  Incoming characters from other rooms use the same confirmation and wait
+  behind a pending painting and until Face Shop is visible; their cue and
+  source apply only after approval. A cue edited during the wait is retained
+  unless the Forge supplies an explicit replacement cue.
+  The browser restores the latest 40 working versions and a pending painting
+  after refresh through local storage (when the browser permits it). If a
+  painting disappears from ComfyUI's queue and history, the bench releases it.
+  **Abandon this painting** also frees the bench during an outage while
+  keeping earlier versions; a running painting can still finish in Canisters.
+  Canisters keeps its Pinboard on the shelf beside the mounted print (below
+  it in narrow layouts). Naming a recipe opens a dialog; pins and shelf
+  scrolling do not change the print's height budget. Media keeps a 120px
+  minimum. At the witnessed 1000px window height the acts sit above the ledger;
+  shorter windows or taller captions may need folio scrolling to reach all acts.
+  Models do not guarantee identity preservation: inspect the comparison. The Stage
+  and Foley choose tasks before technical settings; Night Shift distinguishes
+  variants from subject lists, and only queues kiln jobs. Prop Shelf exports
+  an approved mesh and its painting. The native consoles remain under
+  Understage, labelled Advanced. See the gadget journal's dedicated-flow
+  section for fixture browser verification and live acceptance boundaries.
 - **Forge** — the Promptsmith in a panel: idea → cue cards, each with
   copy / "Cue the stage" / "Cue the face shop" buttons. A **voice dropdown**
   (2026-07-18) lists every model on the Ollama shelf; "the booth decides"
@@ -221,7 +250,7 @@ never scrolls — the folio does.
   other cue — no multipart parser, no second door. The server names the
   file by its bytes, not the browser's claim (a `.png` of HTML is refused
   415), flattens path tricks to a basename, never overwrites (`crier.png`
-  → `crier-2.png`), lands it via `os.replace` so a torn upload can never
+  → `crier-2.png`), publishes it atomically and exclusively so a torn upload can never
   trip LoadImage, and refuses anything over 32 MB (413). Dropping files
   straight into `footage/` still works — the hatch is the door for the
   Windows side of the glass.

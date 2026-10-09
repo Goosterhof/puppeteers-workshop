@@ -62,8 +62,9 @@ describe('applyLabel', () => {
     const pin = (room: PinnedRecipe['room'], recipe: PinnedRecipe['recipe']): PinnedRecipe =>
         ({id: 'pin-1', name: 'x', room, recipe});
 
-    it('should offer no replay act for foley — no panel takes those pins yet', () => {
-        expect(applyLabel(pin('foley', {prompt: 'rain on slate'}))).toBe('');
+    it('should replay a foley cue and refuse a cue-less foley pin', () => {
+        expect(applyLabel(pin('foley', {prompt: 'rain on slate'}))).toBe('→ Record with this cue');
+        expect(applyLabel(pin('foley', {seed: 7}))).toBe('');
         expect(applyLabel(pin('kiln', {octree: 224}))).not.toBe('');
         expect(applyLabel(pin('stage', {steps: 4}))).not.toBe('');
     });

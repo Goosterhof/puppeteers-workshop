@@ -99,7 +99,7 @@ describe('the wheel on the shelf', () => {
         expect(mountWheelMock.mock.calls[0]![1]).toBe('/pack-queue/omafiets/omafiets.glb');
         expect(wrapper.find('#shelf-view .candidate.spotlight').exists()).toBe(true);
 
-        await wrapper.find('#shelf-view .acts .act').trigger('click');
+        await wrapper.findAll('#shelf-view .acts .act').find(a => a.text() === '✕ Off the wheel')!.trigger('click');
         await vi.advanceTimersByTimeAsync(0);
         expect(wheelHandles[0]!.dispose).toHaveBeenCalledTimes(1);
         expect(wrapper.find('#shelf-view .candidate').exists()).toBe(false);

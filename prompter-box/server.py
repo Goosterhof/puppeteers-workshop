@@ -10,6 +10,7 @@ Stdlib only, same philosophy as the Promptsmith: no venv, no dependencies.
 """
 
 import base64
+import hashlib
 import json
 import mimetypes
 import os
@@ -18,6 +19,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -558,6 +560,42 @@ def tail_lines(path, n=25):
         return []
 
 
+def shelve_cast(src):
+    """Atomic, collision-safe promotion of a result into the footage shelf."""
+    FOOTAGE.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=FOOTAGE, suffix=".part", delete=False) as f:
+        staging = Path(f.name)
+    try:
+        shutil.copyfile(src, staging)
+        return publish_still(staging, src.name, reuse=True)
+    finally:
+        staging.unlink(missing_ok=True)
+
+
+def publish_still(staging, name, *, reuse):
+    """Publish a whole file exclusively; uploads and casts share the same door."""
+    staging.chmod(0o644)  # match ordinary shelf files before publishing the hardlink
+    stem, suffix = Path(name).stem, Path(name).suffix
+    n = 1
+    while True:
+        dest = FOOTAGE / name
+        try:
+            os.link(staging, dest)  # exclusive + atomic: never a half-painted sitter
+            return name
+        except FileExistsError:
+            if reuse and not dest.is_symlink() and dest.is_file() and same_still(staging, dest):
+                return name
+            n += 1
+            name = f"{stem}-{n}{suffix}"
+
+
+def same_still(left, right):
+    if left.stat().st_size != right.stat().st_size:
+        return False
+    with left.open("rb") as a, right.open("rb") as b:
+        return hashlib.file_digest(a, "sha256").digest() == hashlib.file_digest(b, "sha256").digest()
+
+
 class BoothWindow(BaseHTTPRequestHandler):
     """The service hatch — every request to the booth passes through here."""
 
@@ -812,13 +850,15 @@ class BoothWindow(BaseHTTPRequestHandler):
         if not ext:
             return self.fail("The shelf takes stills only — PNG, JPEG, or WebP. That file opened as "
                              "something else; export it as one of the three and bring it back.", 415)
-        name = shelf_name(str(p.get("name") or "still"), ext)
         FOOTAGE.mkdir(parents=True, exist_ok=True)
-        # Land it whole or not at all: a browser that drops mid-upload must never
-        # leave a torn still that LoadImage trips over later.
-        staging = FOOTAGE / f".{name}.part"
-        staging.write_bytes(data)
-        os.replace(staging, FOOTAGE / name)
+        name = shelf_name(str(p.get("name") or "still"), ext)
+        with tempfile.NamedTemporaryFile(dir=FOOTAGE, suffix=".part", delete=False) as f:
+            staging = Path(f.name)
+            f.write(data)
+        try:
+            name = publish_still(staging, name, reuse=False)
+        finally:
+            staging.unlink(missing_ok=True)
         self.reply({"shelved": name, "bytes": len(data)})
 
     def api_forge(self, p):
@@ -929,12 +969,23 @@ class BoothWindow(BaseHTTPRequestHandler):
         self.reply({"prompt_id": res["prompt_id"], "evicted": evicted})
 
     def api_face_result(self, prompt_id):
+        history_url = f"{COMFY}/history/{urllib.parse.quote(prompt_id)}"
         try:
-            hist = http_json(f"{COMFY}/history/{urllib.parse.quote(prompt_id)}", timeout=5)
+            hist = http_json(history_url, timeout=5)
+            if prompt_id not in hist:
+                queue = http_json(f"{COMFY}/queue", timeout=5)
+                # ComfyUI queue tuples are [number, prompt_id, prompt, ...].
+                if any(len(row) > 1 and row[1] == prompt_id
+                       for key in ("queue_running", "queue_pending")
+                       for row in queue.get(key, [])):
+                    return self.reply({"state": "painting"})
+                # Completion can move the job from queue to history between
+                # reads. Check history again before declaring the job lost.
+                hist = http_json(history_url, timeout=5)
         except OSError:
             return self.fail("The Face Shop is dark — ComfyUI is not answering on :8188.", 502)
         if prompt_id not in hist:
-            return self.reply({"state": "painting"})
+            return self.reply({"state": "lost"})
         entry = hist[prompt_id]
         if entry["status"].get("status_str") == "error":
             return self.reply({"state": "failed", "detail": entry["status"].get("messages", [])})
@@ -1080,8 +1131,7 @@ class BoothWindow(BaseHTTPRequestHandler):
         src = (root / name).resolve()
         if not src.is_relative_to(root.resolve()) or not src.is_file():
             return self.fail("That painting is not hanging on that rack.", 404)
-        shutil.copyfile(src, FOOTAGE / src.name)
-        self.reply({"cast": src.name})
+        self.reply({"cast": shelve_cast(src)})
 
     # The rooms a take can be binned from. The Kiln's firings and the pack
     # queue are NOT here on purpose — they die through the Rack's own

@@ -70,18 +70,17 @@ export function kilnKnobs(recipe: Record<string, unknown>): KilnKnobs {
 }
 
 // Where a pin can be replayed — the apply act's label, per pin. Foley pins
-// hang for the record (and the shelf search) but no panel takes them yet,
-// and a face pin replays only its prompt — without one there is nothing to
-// cue, so it gets no act rather than a live button that no-ops (the
+// replay their cue and seed; the Face Shop restores its painter and knobs
+// too. A cue-driven pin without a prompt gets no act rather than a live button that no-ops (the
 // general's review of PR #14, Minor 1).
 const APPLY_LABEL: Record<PinRoom, string> = {
     kiln: '→ Fire with these settings',
     stage: '→ Cue the stage with it',
     face: '→ Cue the face shop with it',
-    foley: '',
+    foley: '→ Record with this cue',
 };
 
 export function applyLabel(pin: PinnedRecipe): string {
-    if (pin.room === 'face' && typeof pin.recipe.prompt !== 'string') return '';
+    if ((pin.room === 'face' || pin.room === 'foley') && typeof pin.recipe.prompt !== 'string') return '';
     return APPLY_LABEL[pin.room];
 }

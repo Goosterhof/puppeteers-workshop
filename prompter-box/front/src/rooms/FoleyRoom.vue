@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import {NumberInput, SingleSelect, TextInput, Textarea} from '@script-development/ui-inputs';
-import {computed, onMounted, onUnmounted, ref} from 'vue';
+import {computed, onMounted, onUnmounted, ref, watch} from 'vue';
+import RoomFlow from '../components/RoomFlow.vue';
 import LogWell from '../components/LogWell.vue';
 import StampedMount from '../components/StampedMount.vue';
 import {api} from '../composables/useBoothApi';
 import {createJobPoller} from '../composables/useJobPoller';
 import {loadArchive} from '../stores/archive';
+import {foleyHandoff} from '../stores/pins';
 import {foleyReel, foleySources, loadFoleySources} from '../stores/booth';
+
+defineOptions({inheritAttrs: false});
 
 interface FoleyJob {
     state?: string;
@@ -34,6 +38,18 @@ const reelOptions = computed(() => [
 ]);
 const duration = ref(8);
 const seed = ref(7);
+const task = ref(foleyReel.value ? 'score' : 'sound');
+watch(foleyReel, reel => { if (reel) task.value = 'score'; });
+function chooseTask(next: string) {
+    task.value = next;
+    if (next === 'sound') foleyReel.value = '';
+}
+watch(foleyHandoff, handoff => {
+    if (!handoff) return;
+    if (typeof handoff.recipe.prompt === 'string') prompt.value = handoff.recipe.prompt;
+    if (handoff.recipe.seed !== undefined && Number.isFinite(Number(handoff.recipe.seed))) seed.value = Number(handoff.recipe.seed);
+    foleyHandoff.value = null;
+}, {immediate: true});
 const error = ref('');
 const logLines = ref<string[]>([]);
 const logShown = ref(false);
@@ -71,6 +87,7 @@ const poller = createJobPoller({
 
 async function cue() {
     error.value = '';
+    if (task.value === 'score' && !foleyReel.value) { error.value = 'Choose the reel whose motion should receive the sound.'; return; }
     const [from, ...rest] = (foleyReel.value || ':').split(':');
     try {
         await api('/api/foley/generate', {
@@ -103,18 +120,27 @@ onUnmounted(poller.stop);
 </script>
 
 <template>
+  <RoomFlow room="foley" :current="results?.length ? 3 : logShown ? 2 : prompt.trim() ? 1 : 0" />
   <div class="panel">
-    <label class="field" for="foley-prompt">The cue — what should it sound like</label>
-    <Textarea id="foley-prompt" v-model="prompt" placeholder="a man screams in terror as he falls, classic movie stock scream" />
-    <label class="field" for="foley-video">The reel — optional: score a video (audio lands ON the motion)</label>
+    <h3 class="flow-heading">1 · What needs a sound?</h3>
+    <div id="foley-task" class="task-picks">
+      <button :aria-pressed="task === 'sound'" @click="chooseTask('sound')">Make a sound effect</button>
+      <button :aria-pressed="task === 'score'" @click="chooseTask('score')">Score a video</button>
+    </div>
+    <div v-show="task === 'score'">
+    <label class="field" for="foley-video">The reel — choose the video whose motion receives the sound</label>
     <SingleSelect
       id="foley-video" v-model="foleyReel"
-      :options="reelOptions" label="label" :alphabetical-sort="false"
+      :options="reelOptions" :label="(option: {label: string}) => option.label" :alphabetical-sort="false"
       options-label="The reels — stage takes, then footage"
     />
+    </div>
+    <h3 class="flow-heading">2 · Describe what we should hear</h3>
+    <label class="field" for="foley-prompt">The cue — what should it sound like</label>
+    <Textarea id="foley-prompt" v-model="prompt" placeholder="a man screams in terror as he falls, classic movie stock scream" />
     <div class="row" style="margin-top:14px">
       <div><label class="field" for="foley-neg">Negative cue</label><TextInput id="foley-neg" v-model="negative" /></div>
-      <div><label class="field" for="foley-dur">Seconds</label><NumberInput id="foley-dur" v-model="duration" :min="1" :max="30" :step="1" /></div>
+      <div><label class="field" for="foley-dur">Seconds</label><NumberInput id="foley-dur" v-model="duration" :disabled="task === 'score'" :min="1" :max="30" :step="1" /></div>
       <div><label class="field" for="foley-seed">Seed</label><NumberInput id="foley-seed" v-model="seed" /></div>
       <div><button id="foley-go" class="fire" style="margin-top:0" @click="cue">Cue the foley booth</button></div>
     </div>

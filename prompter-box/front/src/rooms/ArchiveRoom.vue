@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {TextInput} from '@script-development/ui-inputs';
 import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from 'vue';
+import RoomFlow from '../components/RoomFlow.vue';
 import CanisterCard from '../components/CanisterCard.vue';
 import FilterPills from '../components/FilterPills.vue';
 import PinnedRecipeCard from '../components/PinnedRecipeCard.vue';
@@ -11,8 +12,8 @@ import type {ShelfItem} from '../lib/canisters';
 import {canisterRecipe} from '../lib/pins';
 import type {PinnedRecipe} from '../lib/pins';
 import {archive, loadArchive} from '../stores/archive';
-import {castAsLead, facePrompt, leadRes, loadFoleySources, openTab} from '../stores/booth';
-import {hangPin, kilnHandoff, loadPins, pins, stageHandoff, takeDownPin} from '../stores/pins';
+import {castAsLead, leadRes, loadFoleySources, openTab, refineStill, stageTaskHandoff} from '../stores/booth';
+import {faceRecipeHandoff, foleyHandoff, hangPin, kilnHandoff, loadPins, pins, stageHandoff, takeDownPin} from '../stores/pins';
 
 // The Light Table (2026-08-23) — the room stopped being a wall of prints you
 // walk past and became a bench you work at. The print lies on the bench under
@@ -80,6 +81,8 @@ const mountedTitle = computed(() => !mounted.value ? ''
 // The Pinboard (#08) — naming happens here, on the mount, because a pin is
 // born from the take you are looking at, never authored from thin air.
 const pinning = ref(false);
+const pinDialog = ref<HTMLDialogElement | null>(null);
+watch(pinning, open => { if (open) nextTick(() => pinDialog.value?.showModal()); });
 const pinName = ref('');
 const pinError = ref('');
 
@@ -108,8 +111,11 @@ function applyPin(pin: PinnedRecipe) {
         stageHandoff.value = handoff;
         openTab('stage');
     } else if (pin.room === 'face' && typeof pin.recipe.prompt === 'string') {
-        facePrompt.value = pin.recipe.prompt;
+        faceRecipeHandoff.value = handoff;
         openTab('face');
+    } else if (pin.room === 'foley' && typeof pin.recipe.prompt === 'string') {
+        foleyHandoff.value = handoff;
+        openTab('foley');
     }
 }
 
@@ -122,14 +128,24 @@ async function unpin(pin: PinnedRecipe) {
     }
 }
 
+function copyAct(it: ShelfItem): MountAct | null {
+    if (!it.meta?.prompt) return null;
+    return {label: 'Copy the cue', run: ctx => {
+        navigator.clipboard.writeText(it.meta!.prompt!);
+        ctx.relabel('Cue copied');
+    }};
+}
+function refineAct(it: ShelfItem): MountAct | null {
+    if (it.kind !== 'image' || (it.room !== 'face' && it.room !== 'stage')) return null;
+    return {label: 'Refine this character →', run: async ctx => {
+        try { await refineStill({room: it.room as 'face' | 'stage', name: it.name}, canisterRecipe(it.meta || {})); }
+        catch (e) { ctx.relabel(e instanceof Error ? e.message : 'The character could not reach the easel'); }
+    }};
+}
 function buildActs(it: ShelfItem): MountAct[] {
     const rows: MountAct[] = [];
-    if (it.meta?.prompt) {
-        rows.push({label: 'Copy the cue', run: ctx => {
-            navigator.clipboard.writeText(it.meta!.prompt!);
-            ctx.relabel('Cue copied');
-        }});
-    }
+    const cueCopy = copyAct(it);
+    if (cueCopy) rows.push(cueCopy);
     if (it.room === 'stage' && it.kind === 'video') {
         rows.push({label: 'Score it in the foley booth →', run: async () => {
             await loadFoleySources(`stage:${it.name}`);
@@ -142,9 +158,12 @@ function buildActs(it: ShelfItem): MountAct[] {
             ctx.relabel('Cast — it is in the footage now');
         }});
     }
+    const refinement = refineAct(it);
+    if (refinement) rows.push(refinement);
     if (it.room === 'face') {
         rows.push({label: 'Send to the stage →', run: async ctx => {
             await castAsLead(it.name);
+            stageTaskHandoff.value = 'i2v';
             const img = ctx.el?.querySelector('img');
             if (img?.naturalWidth) leadRes.value = {w: img.naturalWidth, h: img.naturalHeight};
             openTab('stage');
@@ -282,16 +301,45 @@ function onKeydown(e: KeyboardEvent) {
 // The bench sticks BELOW the shelf head, whose height changes when the pills
 // wrap — so the room measures it rather than guessing a number.
 let ruler: ResizeObserver | undefined;
+let measuredBody: HTMLElement | null = null;
 function measureHead() {
     const h = head.value?.offsetHeight;
     if (h) root.value?.style.setProperty('--shelf-head', `${Math.round(h)}px`);
+    measurePrint(root.value);
 }
+function measurePrint(panel: HTMLElement | null) {
+    if (!panel) return;
+    const deck = panel.closest<HTMLElement>('.deck');
+    const body = panel.querySelector<HTMLElement>('.mount-body');
+    const bench = panel.querySelector<HTMLElement>('.bench');
+    const split = panel.querySelector<HTMLElement>('.light-table-split');
+    if (!deck || !body || !bench || !split || !head.value) return;
+    const stacked = getComputedStyle(body.parentElement!).display !== 'grid';
+    const bodyHeight = stacked ? body.offsetHeight : 0;
+    const box = getComputedStyle(bench);
+    // The panel's normal position stays constant as the deck scrolls. The
+    // Pinboard is on the shelf, so it never enters the print's height budget.
+    const panelTop = panel.getBoundingClientRect().top + deck.scrollTop;
+    const frameTop = panelTop + Number.parseFloat(getComputedStyle(panel).paddingTop)
+        + head.value.offsetHeight + Number.parseFloat(getComputedStyle(split).marginTop)
+        + Number.parseFloat(box.paddingTop);
+    const available = deck.getBoundingClientRect().bottom - frameTop - bodyHeight - Number.parseFloat(box.paddingBottom) - 8;
+    panel.style.setProperty('--bench-media-height', `${Math.max(120, Math.floor(available))}px`);
+}
+watch(mounted, () => nextTick(() => {
+    if (measuredBody) ruler?.unobserve(measuredBody);
+    measuredBody = root.value?.querySelector<HTMLElement>('.mount-body') ?? null;
+    if (measuredBody) ruler?.observe(measuredBody);
+    measureHead();
+}));
 
 onMounted(() => {
     document.addEventListener('keydown', onKeydown);
     if (typeof ResizeObserver === 'undefined' || !head.value) return;
     ruler = new ResizeObserver(measureHead);
     ruler.observe(head.value);
+    const deck = root.value?.closest('.deck');
+    if (deck) ruler.observe(deck);
 });
 onBeforeUnmount(() => {
     document.removeEventListener('keydown', onKeydown);
@@ -311,6 +359,7 @@ watch(() => props.active, a => {
 <template>
   <div ref="root" class="panel light-table">
     <div ref="head" class="shelf-head">
+      <RoomFlow room="archive" :current="mounted ? 2 : filtered ? 1 : 0" />
       <div class="row">
         <div style="flex:2;min-width:220px">
           <label class="field" for="arch-search">Search the shelves — filename, prompt slug, seed</label>
@@ -336,14 +385,6 @@ watch(() => props.active, a => {
       <p id="arch-count" class="note">{{ countLine }}</p>
     </div>
 
-    <div v-if="pins.length" id="pinboard">
-      <p class="pinboard-head">The Pinboard — named formulas, promoted from proven takes</p>
-      <div class="pinboard-grid">
-        <PinnedRecipeCard v-for="p in pins" :key="p.id" :pin="p" @apply="applyPin" @unpin="unpin" />
-      </div>
-    </div>
-    <p v-show="pinError && !pinning" class="error">{{ pinError }}</p>
-
     <div class="light-table-split">
       <!-- THE BENCH — sticky under the shelf head, in its own pool of lamplight -->
       <div id="arch-view" class="bench bench-narrow">
@@ -355,7 +396,7 @@ watch(() => props.active, a => {
           @binned="onBinned"
         />
         <p v-else class="bench-bare">The bench is bare. Take a canister down off the shelf — it stays under the lamp while you walk the rest.</p>
-        <div v-if="mounted && pinning" class="pin-naming">
+        <dialog v-if="mounted && pinning" ref="pinDialog" class="take-bin pin-naming" aria-label="Pin a proven recipe" @cancel="pinning = false">
           <label class="field" for="pin-name">Name the formula — what will you ask for again?</label>
           <div class="row" style="align-items:flex-end">
             <div style="flex:2;min-width:220px"><TextInput id="pin-name" v-model="pinName" placeholder="Spoked Vehicle" /></div>
@@ -363,22 +404,32 @@ watch(() => props.active, a => {
             <div><button class="act pin-cancel" @click="pinning = false">Cancel</button></div>
           </div>
           <p v-show="pinError" class="error">{{ pinError }}</p>
-        </div>
+        </dialog>
       </div>
 
       <!-- THE SHELF — the thumbrow class rides along like the old markup; its
            2px transparent border and .88 opacity on the folio are the look -->
-      <TransitionGroup
-        id="arch-grid" tag="div" class="shelf thumbrow"
-        :move-class="closing ? 'shelf-close' : 'shelf-still'"
-        enter-active-class="shelf-still" leave-active-class="shelf-still"
-      >
-        <CanisterCard
-          v-for="it in items" :key="`${it.room}/${it.name}`" :item="it"
-          :on-bench="mounted ? it.room === mounted.room && it.name === mounted.name : false"
-          @mount="mountCanister"
-        />
-      </TransitionGroup>
+      <div class="shelf-column">
+        <div v-if="pins.length" id="pinboard">
+          <p class="pinboard-head">The Pinboard — named formulas, promoted from proven takes</p>
+          <div class="pinboard-grid">
+            <PinnedRecipeCard v-for="p in pins" :key="p.id" :pin="p" @apply="applyPin" @unpin="unpin" />
+          </div>
+        </div>
+        <p v-show="pinError && !pinning" class="error">{{ pinError }}</p>
+
+        <TransitionGroup
+          id="arch-grid" tag="div" class="shelf thumbrow"
+          :move-class="closing ? 'shelf-close' : 'shelf-still'"
+          enter-active-class="shelf-still" leave-active-class="shelf-still"
+        >
+          <CanisterCard
+            v-for="it in items" :key="`${it.room}/${it.name}`" :item="it"
+            :on-bench="mounted ? it.room === mounted.room && it.name === mounted.name : false"
+            @mount="mountCanister"
+          />
+        </TransitionGroup>
+      </div>
     </div>
   </div>
 </template>
@@ -427,11 +478,9 @@ watch(() => props.active, a => {
    760) — but on a short window the lamp lowers rather than the acts row
    falling off the bottom of the screen */
 .bench .mount-frame img, .bench .mount-frame video {
-  /* 300 = the head's own offset in the deck + the print's body + the bench's
-     lamplight padding + the footlight ledger. Measured, not guessed: at a
-     1000px window the whole print INCLUDING its acts row has to be reachable
-     without scrolling, or the bench is not a bench. */
-  max-height: min(62vh, calc(100vh - var(--shelf-head) - 300px));
+  /* Measure the room's real remaining height, reserving wrapped action rows
+     and the footlight ledger. The fallback is only for the initial layout. */
+  max-height: min(62vh, var(--bench-media-height, calc(100vh - var(--shelf-head) - 350px)));
 }
 .bench-bare {
   font-size: 12.5px; font-style: italic; color: var(--ink-soft);
@@ -440,8 +489,8 @@ watch(() => props.active, a => {
 
 /* one ink hairline between the bench and the shelf — drawn in the gutter so
    it costs the shelf no width */
-.shelf { position: relative; }
-.shelf::before {
+.shelf-column { position: relative; min-width: 0; }
+.shelf-column::before {
   content: ''; position: absolute; left: -12px; top: 0; bottom: 0; width: 1px;
   background: var(--ink-hair);
 }
@@ -452,7 +501,7 @@ watch(() => props.active, a => {
 .shelf-close { transition: transform 150ms ease; }
 .shelf-still { transition: none; }
 
-#pinboard { margin-top: 18px; }
+#pinboard { margin-bottom: 18px; }
 .pinboard-head {
   font: 11px var(--display); letter-spacing: .2em; text-transform: uppercase;
   color: var(--dim); margin-bottom: 10px;
@@ -472,14 +521,14 @@ watch(() => props.active, a => {
    (R2). ===== */
 @media (max-width: 1180px) {
   .light-table-split { grid-template-columns: minmax(0, 1fr); row-gap: 18px; }
-  .shelf::before { display: none; }
+  .shelf-column::before { display: none; }
   /* the shelf has the whole page now — five cards at ~158, not eight at 100 */
   #arch-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
   .canister { contain-intrinsic-size: 0 148px; }
   .bench { max-height: calc(100vh - var(--shelf-head) - 16px); padding: 12px 12px 14px; }
   .bench-narrow .mount { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
   .bench-narrow .mount-frame { align-items: center; }
-  .bench-narrow .mount-frame img, .bench-narrow .mount-frame video { max-height: 40vh; }
+  .bench-narrow .mount-frame img, .bench-narrow .mount-frame video { max-height: min(40vh, var(--bench-media-height, 40vh)); }
   .bench-narrow .mount-body { padding: 12px 14px 14px; }
   .bench-narrow .mount-title { font-size: 12.5px; }
 }

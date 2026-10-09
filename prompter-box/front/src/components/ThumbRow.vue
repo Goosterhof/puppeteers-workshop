@@ -64,17 +64,19 @@ function onDrop(e: DragEvent) {
     </button>
     <input ref="hatch" type="file" :accept="STILL_ACCEPT" multiple hidden @change="onPick">
     <p v-if="!footage.length" class="empty">No footage on the shelf — bring a still through the hatch, drop one here, or drop files into <code>footage/</code>.</p>
-    <img
-      v-for="name in footage" :key="name"
-      :src="`/footage/${encodeURIComponent(name)}`" :title="name" :alt="name"
-      :class="{picked: picked === name}"
-      @click="emit('pick', name)"
+    <button
+      v-for="name in footage" :key="name" type="button" class="still-pick"
+      :aria-label="`Choose ${name}`" :aria-pressed="picked === name" @click="emit('pick', name)"
     >
+      <img :src="`/footage/${encodeURIComponent(name)}`" :title="name" :alt="name" :class="{picked: picked === name}">
+    </button>
     <p v-if="refusal" class="refusal" role="alert">{{ refusal }}</p>
   </div>
 </template>
 
 <style>
+.still-pick { padding: 0; border: 0; background: transparent; cursor: pointer; flex: none; }
+.still-pick:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 /* The hatch: the one tile on the strip that is a door, not a still. It wears
    the strip's 86px height so it reads as a member of the row, and a dashed
    border so it never passes for footage. */
