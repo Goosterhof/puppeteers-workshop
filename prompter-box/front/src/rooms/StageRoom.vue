@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {NumberInput, SingleSelect, Textarea} from '@script-development/ui-inputs';
+import {GroupSelect, NumberInput, SingleSelect, Textarea} from '@script-development/ui-inputs';
 import {computed, nextTick, onMounted, onUnmounted, ref, watch} from 'vue';
 import RoomFlow from '../components/RoomFlow.vue';
 import LogWell from '../components/LogWell.vue';
@@ -11,6 +11,7 @@ import {loadArchive} from '../stores/archive';
 import {castAsLead, leadRes, loadFoleySources, openTab, pickedImage, refineStill, stagePrompt, stageTaskHandoff} from '../stores/booth';
 import {stageHandoff} from '../stores/pins';
 import {nearestResolution, RES_PRESETS} from '../lib/resolution';
+import {shelfGroups} from '../lib/shelf-groups';
 
 defineOptions({inheritAttrs: false});
 
@@ -89,8 +90,8 @@ const performer = () => models.value.find(m => m.type === modelType.value);
 const kind = computed(() => performer()?.kind);
 const isImage = computed(() => kind.value === 't2i');
 
-// the playbill, the choreography shelf, and the resolution presets as
-// SingleSelect options — source order preserved, no alphabetizing
+// the playbill and the resolution presets as SingleSelect options, the
+// choreography shelf as GroupSelect groups — source order preserved
 const task = ref('i2v');
 const TASKS = [{id: 'i2v', label: 'Animate a still'}, {id: 't2v', label: 'Video from text'}, {id: 'swap', label: 'Transfer motion'}, {id: 't2i', label: 'Advanced still painter'}];
 const availableTasks = computed(() => TASKS.filter(t => models.value.some(m => m.kind === t.id)));
@@ -115,11 +116,7 @@ watch(modelType, () => { if (performer()) task.value = performer()!.kind; });
 const modelOptions = computed(() => models.value.filter(m => m.kind === task.value).map(m => ({
     id: m.type, label: `${m.name} · ${KIND_LABEL[m.kind] || m.kind}`,
 })));
-const guideOptions = computed(() => [
-    {id: '', label: '— pick the choreography —'},
-    ...guides.value.stage.map(n => ({id: `stage:${n}`, label: `stage · ${n}`})),
-    ...guides.value.footage.map(n => ({id: `footage:${n}`, label: `footage · ${n}`})),
-]);
+const guideGroups = computed(() => shelfGroups('— pick the choreography —', guides.value));
 const resSelectOptions = computed(() => resOptions.value.map(r => ({id: r, label: r})));
 
 function applyPerformer() {
@@ -320,11 +317,13 @@ onUnmounted(poller.stop);
     <ThumbRow id="thumbs" :picked="pickedImage" @pick="pickThumb" />
     <div v-show="kind === 'swap'" id="stage-guide-row">
       <label class="field" for="stage-guide">The choreography — the driving video whose motion the character re-performs</label>
-      <SingleSelect
+      <GroupSelect
         id="stage-guide" v-model="guide"
-        :options="guideOptions" :label="(option: {label: string}) => option.label" :alphabetical-sort="false"
+        :groups="guideGroups" label="label"
         options-label="The driving videos — stage takes, then footage"
-      />
+      >
+        <template #option="{option}">{{ option.name }}</template>
+      </GroupSelect>
     </div>
     <details class="room-settings">
       <summary>Advanced settings · performer, wardrobe and sampling</summary>

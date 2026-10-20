@@ -60,9 +60,9 @@ describe('FoleyRoom', () => {
     it('a picked reel fires video-to-audio — the stage take rides video/video_from', async () => {
         const wrapper = mount(FoleyRoom);
         await vi.advanceTimersByTimeAsync(0);
-        // the reel shelf is a ui-inputs SingleSelect — open, then commit
+        // the reel shelf is a ui-inputs GroupSelect — open, then commit
         await wrapper.find('#foley-video').trigger('click');
-        await wrapper.findAll('.ui-select__option').find(o => o.text() === 'stage · take-seed7.webm')!.trigger('click');
+        await wrapper.find('[role="group"][aria-label="stage takes"] .ui-groupselect__option').trigger('click');
         await wrapper.find('#foley-prompt').setValue('the bell scores itself');
         await fire(wrapper);
 
@@ -70,6 +70,23 @@ describe('FoleyRoom', () => {
             video: 'take-seed7.webm',
             video_from: 'stage',
         }));
+        wrapper.unmount();
+    });
+
+    it('the reel shelf hangs as groups — no-reel on top, then stage takes, then footage', async () => {
+        const wrapper = mount(FoleyRoom);
+        await vi.advanceTimersByTimeAsync(0);
+        await wrapper.findAll('#foley-task button').find(b => b.text() === 'Score a video')!.trigger('click');
+        await wrapper.find('#foley-video').trigger('click');
+
+        const groups = wrapper.findAll('[role="listbox"] [role="group"]');
+        expect(groups.map(g => g.attributes('aria-label'))).toStrictEqual(['stage takes', 'footage']);
+        expect(groups.map(g => g.findAll('[role="option"]').map(o => o.text()))).toStrictEqual([['take-seed7.webm'], ['clip.mp4']]);
+        expect(wrapper.findAll('.ui-groupselect__option').map(o => o.text())[0]).toBe('— no reel: pure text-to-audio —');
+
+        await groups[1]!.find('[role="option"]').trigger('click');
+        expect(foleyReel.value).toBe('footage:clip.mp4');
+        expect(wrapper.find('#foley-video').text()).toBe('footage · clip.mp4');
         wrapper.unmount();
     });
 
