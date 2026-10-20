@@ -1,0 +1,24 @@
+version: 2
+
+updates:
+    - package-ecosystem: npm
+      directory: /prompter-box/front
+      target-branch: main
+      schedule:
+          interval: weekly
+          day: monday
+          time: '06:00'
+          timezone: 'Europe/Amsterdam'
+      # prompter-box/static/ is a committed build that check:dist reds on any bump changing output; one PR per run means one rebuild.
+      groups:
+          npm-version-updates:
+              applies-to: version-updates
+              patterns:
+                  - '*'
+          npm-security-updates:
+              applies-to: security-updates
+              patterns:
+                  - '*'
+      open-pull-requests-limit: 10
+      labels:
+          - dependencies
