@@ -18,6 +18,11 @@ globalThis.ResizeObserver ??= class {
     disconnect() {}
 };
 
+// jsdom carries no Popover API — ui-inputs (0.11.0+) promotes an open select
+// menu to the top layer with showPopover(). The menu stays in the DOM either way.
+HTMLElement.prototype.showPopover ??= () => {};
+HTMLElement.prototype.hidePopover ??= () => {};
+
 // jsdom carries no matchMedia — the booth reads it for the reduced-motion
 // gates. `globalThis.__reducedMotion` lets a spec flip the preference.
 globalThis.__reducedMotion = false;

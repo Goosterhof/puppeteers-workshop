@@ -40,11 +40,11 @@ const boot = async () => {
     return wrapper;
 };
 
-// the selects are ui-inputs SingleSelects now — a pick is open-then-commit
+// the selects are ui-inputs SingleSelects/GroupSelects — a pick is open-then-commit
 // through the listbox, the way a hand would do it
 const pick = async (wrapper: Awaited<ReturnType<typeof boot>>, id: string, optionLabel: string) => {
     await wrapper.find(`#${id}`).trigger('click');
-    const option = wrapper.findAll('.ui-select__option').find(o => o.text() === optionLabel);
+    const option = wrapper.findAll('.ui-select__option, .ui-groupselect__option').find(o => o.text() === optionLabel);
     await option!.trigger('click');
     await vi.advanceTimersByTimeAsync(0);
 };
@@ -87,6 +87,28 @@ describe('StageRoom', () => {
         pickedImage.value = 'crier.png';
         await wrapper.find('#stage-go').trigger('click');
         expect(wrapper.find('.error').text()).toBe('SCAIL-2 needs choreography — pick a driving video.');
+        wrapper.unmount();
+    });
+
+    it('the choreography shelf hangs as groups and a footage pick rides video_guide', async () => {
+        const wrapper = await boot();
+        await wrapper.findAll('#stage-task button').find(b => b.text() === 'Transfer motion')!.trigger('click');
+        await vi.advanceTimersByTimeAsync(0);
+        await wrapper.find('#stage-guide').trigger('click');
+
+        const groups = wrapper.findAll('[role="listbox"] [role="group"]');
+        expect(groups.map(g => g.attributes('aria-label'))).toStrictEqual(['stage takes', 'footage']);
+        expect(groups.map(g => g.findAll('[role="option"]').map(o => o.text()))).toStrictEqual([['take.webm'], ['walk.mp4']]);
+
+        await groups[1]!.find('[role="option"]').trigger('click');
+        expect(wrapper.find('#stage-guide').text()).toBe('footage · walk.mp4');
+        pickedImage.value = 'crier.png';
+        await wrapper.find('#stage-go').trigger('click');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(apiMock).toHaveBeenCalledWith('/api/stage/generate', expect.objectContaining({
+            model_type: 'scail',
+            video_guide: 'footage:walk.mp4',
+        }));
         wrapper.unmount();
     });
 

@@ -14,9 +14,9 @@
         "typecheck": "vue-tsc --noEmit && vue-tsc --noEmit -p tsconfig.node.json --composite false"
     },
     "dependencies": {
-        "@script-development/ui-inputs": "^0.10.0",
+        "@script-development/ui-inputs": "^0.17.1",
         "three": "^0.177.0",
-        "vue": "^3.5.39"
+        "vue": "^3.5.44"
     },
     "devDependencies": {
         "@types/node": "^24.19.1",

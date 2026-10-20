@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {NumberInput, SingleSelect, TextInput, Textarea} from '@script-development/ui-inputs';
+import {GroupSelect, NumberInput, TextInput, Textarea} from '@script-development/ui-inputs';
 import {computed, onMounted, onUnmounted, ref, watch} from 'vue';
 import RoomFlow from '../components/RoomFlow.vue';
 import LogWell from '../components/LogWell.vue';
@@ -9,6 +9,7 @@ import {createJobPoller} from '../composables/useJobPoller';
 import {loadArchive} from '../stores/archive';
 import {foleyHandoff} from '../stores/pins';
 import {foleyReel, foleySources, loadFoleySources} from '../stores/booth';
+import {shelfGroups} from '../lib/shelf-groups';
 
 defineOptions({inheritAttrs: false});
 
@@ -29,13 +30,7 @@ interface FoleyTake {
 
 const prompt = ref('');
 const negative = ref('music, background music, melody');
-// no-reel rides as a real option (id '') — a picked reel must stay clearable,
-// exactly like the old empty <option>
-const reelOptions = computed(() => [
-    {id: '', label: '— no reel: pure text-to-audio —'},
-    ...foleySources.value.stage.map(n => ({id: `stage:${n}`, label: `stage · ${n}`})),
-    ...foleySources.value.footage.map(n => ({id: `footage:${n}`, label: `footage · ${n}`})),
-]);
+const reelGroups = computed(() => shelfGroups('— no reel: pure text-to-audio —', foleySources.value));
 const duration = ref(8);
 const seed = ref(7);
 const task = ref(foleyReel.value ? 'score' : 'sound');
@@ -129,11 +124,13 @@ onUnmounted(poller.stop);
     </div>
     <div v-show="task === 'score'">
     <label class="field" for="foley-video">The reel — choose the video whose motion receives the sound</label>
-    <SingleSelect
+    <GroupSelect
       id="foley-video" v-model="foleyReel"
-      :options="reelOptions" :label="(option: {label: string}) => option.label" :alphabetical-sort="false"
+      :groups="reelGroups" label="label"
       options-label="The reels — stage takes, then footage"
-    />
+    >
+      <template #option="{option}">{{ option.name }}</template>
+    </GroupSelect>
     </div>
     <h3 class="flow-heading">2 · Describe what we should hear</h3>
     <label class="field" for="foley-prompt">The cue — what should it sound like</label>
