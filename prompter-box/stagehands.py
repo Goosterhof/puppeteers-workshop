@@ -161,5 +161,5 @@ def clearance_refusal(performance, free, needed):
     return (
         f"The stagehands could not clear the GPU for {performance} — "
         f"{free:.1f} GB free, {needed} needed. Let the other work settle, "
-        "then try again."
+        "then try again. If ComfyUI will not release its memory, restart it."
     )
