@@ -598,11 +598,7 @@ def kiln_fire(subject, octree=DEFAULT_OCTREE, threshold=DEFAULT_THRESHOLD,
     # Swap boundary: evict the still-resident paint model before the mesh.
     ok, free = clear_set(MESH_VRAM_GB)
     if not ok:
-        raise KilnColdError(
-            f"The stagehands could not clear the GPU for the mesh stage — "
-            f"{free:.1f} GB free, {MESH_VRAM_GB} needed. The Face Shop is refusing "
-            "to strike its set; give it a moment and fire again."
-        )
+        raise KilnColdError(stagehands.clearance_refusal("the mesh stage", free, MESH_VRAM_GB))
     say(f"firing the mesh at octree {octree}, threshold {threshold}")
     glb_src = fire_mesh(hide_path, octree, threshold, seed=seed, prefix=cid)
     glb_path = cdir / f"{cid}.glb"
@@ -616,10 +612,7 @@ def kiln_fire(subject, octree=DEFAULT_OCTREE, threshold=DEFAULT_THRESHOLD,
             f"refiring once at {REFIRE_OCTREE}/{REFIRE_THRESHOLD}")
         ok, free = clear_set(MESH_VRAM_GB)
         if not ok:
-            raise KilnColdError(
-                f"The stagehands could not clear the GPU for the refire — "
-                f"{free:.1f} GB free, {MESH_VRAM_GB} needed."
-            )
+            raise KilnColdError(stagehands.clearance_refusal("the refire", free, MESH_VRAM_GB))
         glb_src = fire_mesh(hide_path, REFIRE_OCTREE, REFIRE_THRESHOLD,
                             seed=seed, prefix=f"{cid}-refire")
         shutil.copyfile(glb_src, glb_path)
@@ -849,10 +842,7 @@ def rack_refire(candidate_id, octree, threshold, clear_set=None, log=None):
 
     ok, free = clear_set(MESH_VRAM_GB)
     if not ok:
-        raise KilnColdError(
-            f"The stagehands could not clear the GPU for the refire — "
-            f"{free:.1f} GB free, {MESH_VRAM_GB} needed."
-        )
+        raise KilnColdError(stagehands.clearance_refusal("the refire", free, MESH_VRAM_GB))
     say(f"refiring {candidate_id} at octree {octree}, threshold {threshold}")
     glb_src = fire_mesh(new_hide, octree, threshold,
                         seed=recipe["seed"], prefix=new_id)

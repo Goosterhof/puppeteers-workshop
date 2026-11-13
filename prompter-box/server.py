@@ -33,7 +33,7 @@ from pathlib import Path
 # many callers, zero copies to drift.
 from stagehands import (  # noqa: F401  (re-exported names other rooms rely on)
     BASE, COMFY, COMFY_IN, COMFY_OUT, OLLAMA, WAN_UI_PORT,
-    clear_the_set, evict_llms, gpu_vram_free_gb, gpu_vram_gb, http_json,
+    clear_the_set, clearance_refusal, evict_llms, gpu_vram_free_gb, gpu_vram_gb, http_json,
     loaded_llms, port_open, ram_available_gb,
 )
 
@@ -967,10 +967,7 @@ class BoothWindow(BaseHTTPRequestHandler):
             need = 8 if image_b64 else 13
             ok, free = clear_the_set(min_vram_gb=need)
             if not ok:
-                return self.fail(
-                    f"The stagehands could not clear the GPU for the Promptsmith — {free:.1f} GB "
-                    f"free, {need} needed. The Face Shop is refusing to strike its set; give it a "
-                    "moment and strike again, or restart ComfyUI if it will not let go.", 503)
+                return self.fail(clearance_refusal("the Promptsmith", free, need), 503)
         try:
             text = forge(target, idea, int(p.get("variants", 3)), model,
                          bool(p.get("think", True)), image_b64)
@@ -1131,10 +1128,7 @@ class BoothWindow(BaseHTTPRequestHandler):
             need = performer["vram_gb"]
             ok, free = clear_the_set(min_vram_gb=need)
             if not ok:
-                return self.fail(
-                    f"The stagehands could not clear the GPU for {performer['name']} — "
-                    f"{free:.1f} GB free, {need} needed. The Face Shop is refusing to "
-                    "strike its set; give it a moment and cue again, or restart ComfyUI.", 503)
+                return self.fail(clearance_refusal(performer["name"], free, need), 503)
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             settings = dict(performer["recipe"])
             settings.update({
@@ -1286,9 +1280,7 @@ class BoothWindow(BaseHTTPRequestHandler):
             # ~6 GB in 16-bit; 8 asked so the take never lands on a knife's edge.
             ok, free = clear_the_set(min_vram_gb=8)
             if not ok:
-                return self.fail(
-                    f"The stagehands could not clear the GPU for the Foley Booth — {free:.1f} GB "
-                    "free, 8 needed. Give the Face Shop a moment to strike its set and cue again.", 503)
+                return self.fail(clearance_refusal("the Foley Booth", free, 8), 503)
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             # Per-cue output dir: MMAudio names files by prompt slug, so two seeds of the
             # SAME prompt into one dir silently overwrite (day-one scar, see the runbook).
@@ -1346,10 +1338,7 @@ class BoothWindow(BaseHTTPRequestHandler):
             evicted = evict_llms()
             ok, free = clear_the_set(min_vram_gb=kiln.PAINT_VRAM_GB)
             if not ok:
-                return self.fail(
-                    f"The stagehands could not clear the GPU for the kiln — {free:.1f} GB "
-                    f"free, {kiln.PAINT_VRAM_GB} needed. Give the Face Shop a moment to "
-                    "strike its set and fire again.", 503)
+                return self.fail(clearance_refusal("the kiln", free, kiln.PAINT_VRAM_GB), 503)
             octree = int(p.get("octree", kiln.DEFAULT_OCTREE))
             threshold = float(p.get("threshold", kiln.DEFAULT_THRESHOLD))
             two_sided = bool(p.get("two_sided", False))

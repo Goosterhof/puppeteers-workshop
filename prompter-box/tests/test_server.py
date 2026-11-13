@@ -11,6 +11,7 @@ refused before it gets there, which is exactly the code path under test.
 import http.client
 import json
 import threading
+from unittest.mock import Mock
 from http.server import ThreadingHTTPServer
 
 import pytest
@@ -89,6 +90,44 @@ def cue(booth, path, payload, ctype="application/json", origin=None):
     if origin:
         headers["Origin"] = origin
     return booth("POST", path, json.dumps(payload), headers)
+
+
+@pytest.mark.parametrize("path, payload", [
+    ("/api/forge", {"target": "stage", "idea": "an invented garden"}),
+    ("/api/stage/generate", {"model_type": "invented", "prompt": "an invented garden"}),
+    ("/api/foley/generate", {"prompt": "an invented bell"}),
+    ("/api/kiln/generate", {"subject": "an invented clay pot"}),
+])
+@pytest.mark.parametrize("free", [None, 2.0])
+def test_should_voice_gpu_refusals_without_starting_a_model(booth, monkeypatch, path, payload, free):
+    monkeypatch.setattr(server, "stage_playbill", lambda: [
+        {"type": "invented", "name": "The invented performer", "kind": "t2v",
+         "vram_gb": 18, "loras": []},
+    ])
+    monkeypatch.setattr(server, "FORGE_PROFILES", {"stage": {}})
+    machine = booth.tmp / "invented-python"
+    machine.touch()
+    monkeypatch.setattr(server, "MM_PY", machine)
+    monkeypatch.setattr(server, "loaded_llms", lambda: [])
+    monkeypatch.setattr(server, "evict_llms", lambda: [])
+    monkeypatch.setattr(server, "ram_available_gb", lambda: 64)
+    monkeypatch.setattr(server.night_shift, "shift_status", lambda: {"running": False})
+    guard = Mock(return_value=(False, free))
+    monkeypatch.setattr(server, "clear_the_set", guard)
+    forge = Mock(side_effect=AssertionError("a refused cue must not reach Ollama"))
+    spawn = Mock(side_effect=AssertionError("a refused cue must not spawn a machine"))
+    monkeypatch.setattr(server, "forge", forge)
+    monkeypatch.setattr(server.subprocess, "Popen", spawn)
+    status, body = cue(booth, path, payload)
+    assert status == 503
+    assert "try again" in body["error"]
+    assert ("nvidia-smi" if free is None else "2.0 GB free") in body["error"]
+    guard.assert_called_once()
+    forge.assert_not_called()
+    spawn.assert_not_called()
+    assert not server.stage_lock.locked()
+    assert not server.foley_lock.locked()
+    assert not server.kiln_lock.locked()
 
 
 class TestTheStageDoor:
