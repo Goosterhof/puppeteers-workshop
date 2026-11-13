@@ -77,9 +77,13 @@ def gpu_vram_gb():
             ["nvidia-smi", "--query-gpu=memory.total,memory.used", "--format=csv,noheader,nounits"],
             capture_output=True, text=True, timeout=5,
         )
+        if out.returncode != 0:
+            return None
         total, used = (int(v.strip()) for v in out.stdout.strip().split(","))
+        if total <= 0 or not 0 <= used <= total:
+            return None
         return ((total - used) / 1024, total / 1024)
-    except (OSError, ValueError):
+    except (OSError, ValueError, subprocess.TimeoutExpired):
         return None
 
 
@@ -102,8 +106,10 @@ def ram_available_gb():
 def clear_the_set(min_vram_gb, wait_s=90):
     """Ask ComfyUI to strike its set, then VERIFY the GPU is actually clear.
 
-    Returns (ok, vram_free_gb). FAIL-CLOSED by design: callers must refuse
-    the cue when ok is False. Proceeding anyway makes Ollama offload ~10 GB
+    Returns (ok, vram_free_gb), with None for an unreadable meter. FAIL-CLOSED:
+    an unknown reading refuses immediately, including if the meter disappears
+    while waiting. Callers must refuse the cue when ok is False.
+    Proceeding anyway makes Ollama offload ~10 GB
     into system RAM on top of ComfyUI's ~21 GB weight cache — that exact
     stampede OOM-killed the 31 GB WSL VM twice on 2026-07-09 and took the
     GPU bridge (dxg) down with it.
@@ -115,7 +121,9 @@ def clear_the_set(min_vram_gb, wait_s=90):
     the guard still refuses when the set genuinely will not strike.
     """
     free = gpu_vram_free_gb()
-    if free is None or free >= min_vram_gb:
+    if free is None:
+        return False, None
+    if free >= min_vram_gb:
         return True, free
     try:
         http_json(f"{COMFY}/free", {"unload_models": True, "free_memory": True}, timeout=5)
@@ -135,6 +143,23 @@ def clear_the_set(min_vram_gb, wait_s=90):
     while time.time() < deadline:
         time.sleep(1)
         free = gpu_vram_free_gb()
-        if free is None or free >= min_vram_gb:
+        if free is None:
+            return False, None
+        if free >= min_vram_gb:
             return True, free
     return False, free
+
+
+def clearance_refusal(performance, free, needed):
+    """A refused cue must explain an unknown meter without formatting None."""
+    if free is None:
+        return (
+            f"The stagehands cannot read the GPU's free memory for {performance}, "
+            "so this stage was refused. Check that nvidia-smi answers in WSL, "
+            "then try again."
+        )
+    return (
+        f"The stagehands could not clear the GPU for {performance} — "
+        f"{free:.1f} GB free, {needed} needed. Let the other work settle, "
+        "then try again. If ComfyUI will not release its memory, restart it."
+    )

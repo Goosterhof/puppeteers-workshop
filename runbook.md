@@ -377,7 +377,14 @@ never scrolls — the folio does.
   sizes each clearance from the weights on the floor),
   the booth asks ComfyUI to strike its set (`POST /free`) and then VERIFIES
   via `nvidia-smi` that the memory actually returned, refusing the cue with a
-  voiced 503 if it did not. Two subtleties baked in: the `/free` flags are only
+  voiced 503 if it did not. An unreadable driver meter also refuses, immediately:
+  a missing driver, timed-out or failed `nvidia-smi`, or an impossible reading
+  never grants admission. A meter lost while waiting refuses the same way.
+  The station keeps a recoverable explanation rather than formatting an unknown
+  value as a number: check that `nvidia-smi` answers in WSL, then retry the cue.
+  The Kiln's mesh/refire boundaries follow the same rule; its optional vision
+  appraisal is skipped with that explanation while deterministic QA still runs.
+  Two subtleties baked in: the `/free` flags are only
   consumed when ComfyUI's prompt worker wakes from `q.get(timeout=1000)`, so
   the guard follows them with a 1-pixel `EmptyImage → PreviewImage` "knock"
   that wakes the worker instantly; and the guard is skipped entirely when the

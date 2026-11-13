@@ -32,7 +32,7 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage
 
-from stagehands import OLLAMA, http_json
+from stagehands import OLLAMA, clearance_refusal, http_json
 
 N_ANGLES = 8
 FRAME_SIZE = 512
@@ -305,7 +305,7 @@ def turntable_qa(glb_path, expected_parts=1, subject_phrase=None,
             except OSError:
                 vision = {"error": "the appraiser never answered — Ollama is dark on :11434"}
         else:
-            vision = {"error": "the stagehands could not clear the GPU for the appraiser"}
+            vision = {"error": clearance_refusal("the appraiser", _free, VISION_VRAM_GB)}
 
     return QAResult(
         passed=passed,
