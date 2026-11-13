@@ -52,6 +52,7 @@ def booth(tmp_path, monkeypatch):
     monkeypatch.setattr(server, "foley_job", {"state": "idle"})
     monkeypatch.setattr(server, "kiln_job", {"state": "idle"})
     monkeypatch.setattr(server, "port_open", lambda _port: False)
+    monkeypatch.setattr(server, "curtain", {"closing": False, "cues": 0})
 
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.BoothWindow)
     # poll_interval is the shutdown latency, paid once per spec: the stock
@@ -650,3 +651,79 @@ class TestTheBoothsNameplate:
         monkeypatch.setattr(server, "gpu_vram_gb", no_machines)
         monkeypatch.setattr(server, "loaded_llms", no_machines)
         assert booth("GET", "/api/booth")[0] == 200
+
+
+class TestTheCurtain:
+    """Closing the booth is decided under the same lock that admits a cue, so a take
+    can never be accepted and then lost to `./workshop --stop` (PR #36 review)."""
+
+    def test_should_close_an_idle_booth_and_stop_answering(self, booth):
+        status, body = cue(booth, "/api/booth/close", {})
+        assert status == 202
+        assert body == {"closing": True, "busy": []}
+        assert server.curtain["closing"] is True  # every cue from here on is refused
+        for _ in range(50):
+            try:
+                booth("GET", "/api/booth")
+            except OSError:
+                break
+            threading.Event().wait(0.05)
+        else:
+            pytest.fail("the booth kept answering after it closed")
+
+    @pytest.mark.parametrize("ledger,act", [("stage_job", "stage"), ("kiln_job", "kiln")])
+    def test_should_refuse_to_close_mid_take_and_name_it(self, booth, monkeypatch, ledger, act):
+        monkeypatch.setattr(server, ledger, {"state": "running"})
+        status, body = cue(booth, "/api/booth/close", {})
+        assert status == 409
+        assert body["busy"] == [act]
+        assert server.curtain["closing"] is False
+        assert booth("GET", "/api/booth")[0] == 200
+
+    def test_should_count_a_cue_still_clearing_the_gpu_as_on_stage(self, booth, monkeypatch):
+        """The gap the Heretic found: a station holds its lock while it clears the GPU,
+        before its ledger says running. Its cue is on stage the whole time."""
+        clearing = threading.Event()
+        release = threading.Event()
+
+        def slow_clear(**_kw):
+            clearing.set()
+            release.wait(5)
+            return False, 0.0  # a known-low meter; the unknown-meter refusal is PW-2's, not this spec's
+
+        monkeypatch.setattr(server, "evict_llms", lambda: [])
+        monkeypatch.setattr(server, "clear_the_set", slow_clear)
+        answers = {}
+        firing = threading.Thread(target=lambda: answers.update(
+            kiln=cue(booth, "/api/kiln/generate", {"subject": "an invented lantern"})))
+        firing.start()
+        assert clearing.wait(5)
+
+        assert booth("GET", "/api/booth")[1]["busy"] == ["cue"]
+        status, body = cue(booth, "/api/booth/close", {})
+        assert status == 409
+        assert body["busy"] == ["cue"]
+
+        release.set()
+        firing.join(5)
+        assert answers["kiln"][0] == 503
+        assert booth("GET", "/api/booth")[1]["busy"] == []
+
+    def test_should_refuse_a_new_cue_once_the_curtain_is_closing(self, booth, monkeypatch):
+        monkeypatch.setattr(server, "curtain", {"closing": True, "cues": 0})
+        status, body = cue(booth, "/api/kiln/generate", {"subject": "an invented lantern"})
+        assert status == 503
+        assert "closing for the night" in body["error"]
+        assert server.curtain["cues"] == 0
+
+    def test_should_let_go_of_a_cue_that_failed(self, booth):
+        status, _ = booth("POST", "/api/kiln/generate", "not json", {"Content-Type": "application/json"})
+        assert status == 400
+        assert server.curtain["cues"] == 0
+
+    def test_should_take_the_close_only_through_the_stage_door(self, booth):
+        status, _ = cue(booth, "/api/booth/close", {}, origin="http://evil.example")
+        assert status == 403
+        status, _ = cue(booth, "/api/booth/close", {}, ctype="text/plain")
+        assert status == 415
+        assert server.curtain["closing"] is False

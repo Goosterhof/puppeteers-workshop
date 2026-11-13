@@ -69,7 +69,7 @@ stranger_words() {
   say "See what it is with: ss -ltnp 'sport = :$port'. Close it, then run ./workshop again."
 }
 
-acts_words() { printf '%s' "$1" | sed 's/night_shift/the Night Shift/; s/,/, /g'; }
+acts_words() { printf '%s' "$1" | sed 's/night_shift/the Night Shift/; s/cue/a cue the booth is still taking/; s/,/, /g'; }
 
 start_booth() {
   [ -f "$bench/prompter-box/server.py" ] || refuse "There is no prompter-box/server.py beside this launcher ($bench). Run it from the bench."
@@ -180,19 +180,30 @@ stop_booth() {
 Stop it with Ctrl+C in the terminal that runs it." ;;
   esac
   set -- $answer
-  local pid=$2 busy=$3
-  [ "$busy" = - ] || refuse "Not stopping: $(acts_words "$busy") still on stage, and stopping the booth now would lose it.
-Let it settle, or stop it from the console, then run ./workshop --stop again." 2
+  local pid=$2
   local cwd
   cwd=$(readlink "/proc/$pid/cwd" 2>/dev/null) || refuse "The booth says it is process $pid, which this shell can't see. Stop it where it was started."
   [ "$cwd" = "$bench/prompter-box" ] || refuse "The booth on :$port runs from $cwd, not from this bench. Stop it from there."
-  kill -TERM "$pid"
+  # The booth decides, under the same lock that admits a cue, so nothing can slip in between the check
+  # and the close: it either names what is on stage, or stops taking cues and goes dark.
+  local reply code
+  reply=$(curl -sS --max-time 5 -X POST -H 'Content-Type: application/json' --data '{}' \
+    -w '\n%{http_code}' "http://127.0.0.1:$port/api/booth/close" 2>/dev/null) ||
+    refuse "The booth didn't answer the request to close. Try ./workshop --stop again."
+  code=${reply##*$'\n'}
+  if [ "$code" = 409 ]; then
+    local busy
+    busy=$(printf '%s' "${reply%$'\n'*}" | python3 -c 'import json, sys; print(",".join(json.load(sys.stdin).get("busy") or []))')
+    refuse "Not stopping: $(acts_words "$busy") still on stage, and stopping the booth now would lose it.
+Let it settle, or stop it from the console, then run ./workshop --stop again." 2
+  fi
+  [ "$code" = 202 ] || refuse "The booth answered the request to close with $code, so it is still open."
   local waited=0
   while listening && [ "$waited" -lt 100 ]; do
     sleep 0.1
     waited=$((waited + 1))
   done
-  listening && refuse "The booth (process $pid) was asked to stop, but :$port is still open after 10 s."
+  listening && refuse "The booth agreed to close, but :$port is still open after 10 s."
   say "The booth is dark. Nothing was on stage."
 }
 

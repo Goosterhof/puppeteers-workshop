@@ -155,9 +155,13 @@ runs `./workshop` through `wsl.exe`.
   Ctrl+C in its own terminal.
 - Starting the booth starts no model. One thing runs on its own: a Night Shift
   row that was mid-firing resumes at start, and the launcher says so.
-- `./workshop --status` names what is on stage. `./workshop --stop` stops an idle
-  booth and refuses (exit 2) while a Stage, Foley or Kiln take or a Night Shift
-  row is running. It only stops a booth running from this bench.
+- `./workshop --status` names what is on stage. `./workshop --stop` asks the
+  booth to close (`POST /api/booth/close`, through the same stage door as any
+  cue) and never kills it. The booth decides under the lock that admits cues:
+  it refuses (409, exit 2) while a Stage, Foley or Kiln take, a Night Shift row,
+  or any cue it is still taking is on stage. That includes a station still
+  clearing the GPU and a Forge strike. Otherwise it stops taking cues (a late
+  one gets a 503) and goes dark. It only stops a booth running from this bench.
 - Two clicks at once start one booth (a launch lock in the state dir).
 
 `./start-prompter.sh` stays for a terminal session that wants the booth in the

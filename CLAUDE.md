@@ -130,7 +130,7 @@ against it, in two jobs:
 | Job | What it guards | The gate set |
 |---|---|---|
 | **proscenium** | the front — `prompter-box/front/` (Vue 3 + strict TS) | `npm ci`, then `npm run lint` (oxlint), `npm run typecheck` (`vue-tsc --noEmit`), `npx vitest run`, `npm run check:dist` (rebuilds and fails on a stale committed `static/` bundle) |
-| **kiln-room** | the Kiln Room's Python spine, the booth's HTTP layer, and the `workshop` launcher (real bash runs against a stand-in booth on a free port: start, reuse, stranger on the port, crash at start, the launch lock, `--stop`'s refusals) | `pip install numpy pillow scipy trimesh pytest`, then `python -m pytest prompter-box/tests/` — fixture-driven, no GPU, pyrender deliberately absent (`turntable.py` lazy-imports it only on the real EGL path, which this suite never takes) |
+| **kiln-room** | the Kiln Room's Python spine, the booth's HTTP layer, and the `workshop` launcher (real bash runs against a stand-in booth on a free port: start, reuse, stranger on the port, crash at start, the launch lock, `--stop`'s refusals) and the booth's curtain (a close refused while any cue is mid-preparation, and no cue taken once closing) | `pip install numpy pillow scipy trimesh pytest`, then `python -m pytest prompter-box/tests/` — fixture-driven, no GPU, pyrender deliberately absent (`turntable.py` lazy-imports it only on the real EGL path, which this suite never takes) |
 
 **No job fires the machines.** A green Sentinel means the blueprint is sound,
 not that the bench can perform — that stays the live-fire gate's job.

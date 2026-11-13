@@ -49,6 +49,14 @@ class Window(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+    def do_POST(self):
+        if self.path == "/api/booth/close" and mode == "house":
+            if busy:
+                return self.answer(409, {"closing": False, "busy": busy})
+            self.answer(202, {"closing": True, "busy": []})
+            import threading
+            return threading.Thread(target=self.server.shutdown, daemon=True).start()
+        return self.answer(404, {"error": "That window is not in this booth."})
     def do_GET(self):
         if self.path == "/api/booth" and mode == "house":
             return self.answer(200, {"booth": "the-prompters-box", "pid": os.getpid(), "busy": busy})
@@ -229,6 +237,13 @@ class TestStoppingTheBooth:
         result = bench("--stop")
         assert result.returncode == 2
         assert "Not stopping: kiln still on stage" in result.stderr
+        assert port_open(bench.port)
+
+    def test_should_take_the_booths_own_word_on_a_cue_still_being_taken(self, bench):
+        bench(STUB_BUSY="cue")
+        result = bench("--stop")
+        assert result.returncode == 2
+        assert "a cue the booth is still taking" in result.stderr
         assert port_open(bench.port)
 
     def test_should_say_so_when_there_is_nothing_to_stop(self, bench):
