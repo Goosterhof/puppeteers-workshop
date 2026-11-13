@@ -653,12 +653,36 @@ class TestTheBoothsNameplate:
         assert booth("GET", "/api/booth")[0] == 200
 
 
+def settles(check, within_s=2.0):
+    """The booth writes its reply before the handler's finally lets go of the cue, so a
+    client holding the reply can be a moment early. Wait, bounded, for the count to settle."""
+    deadline = threading.Event()
+    for _ in range(int(within_s / 0.01)):
+        if check():
+            return True
+        deadline.wait(0.01)
+    return check()
+
+
+def port_answers(booth):
+    try:
+        booth("GET", "/api/booth")
+        return True
+    except OSError:
+        return False
+
+
+def this_booth(booth):
+    """The close names the booth it checked, as ./workshop --stop does."""
+    return {"pid": booth("GET", "/api/booth")[1]["pid"], "bench": server.os.getcwd()}
+
+
 class TestTheCurtain:
     """Closing the booth is decided under the same lock that admits a cue, so a take
     can never be accepted and then lost to `./workshop --stop` (PR #36 review)."""
 
     def test_should_close_an_idle_booth_and_stop_answering(self, booth):
-        status, body = cue(booth, "/api/booth/close", {})
+        status, body = cue(booth, "/api/booth/close", this_booth(booth))
         assert status == 202
         assert body == {"closing": True, "busy": []}
         assert server.curtain["closing"] is True  # every cue from here on is refused
@@ -674,7 +698,7 @@ class TestTheCurtain:
     @pytest.mark.parametrize("ledger,act", [("stage_job", "stage"), ("kiln_job", "kiln")])
     def test_should_refuse_to_close_mid_take_and_name_it(self, booth, monkeypatch, ledger, act):
         monkeypatch.setattr(server, ledger, {"state": "running"})
-        status, body = cue(booth, "/api/booth/close", {})
+        status, body = cue(booth, "/api/booth/close", this_booth(booth))
         assert status == 409
         assert body["busy"] == [act]
         assert server.curtain["closing"] is False
@@ -700,14 +724,14 @@ class TestTheCurtain:
         assert clearing.wait(5)
 
         assert booth("GET", "/api/booth")[1]["busy"] == ["cue"]
-        status, body = cue(booth, "/api/booth/close", {})
+        status, body = cue(booth, "/api/booth/close", this_booth(booth))
         assert status == 409
         assert body["busy"] == ["cue"]
 
         release.set()
         firing.join(5)
         assert answers["kiln"][0] == 503
-        assert booth("GET", "/api/booth")[1]["busy"] == []
+        assert settles(lambda: booth("GET", "/api/booth")[1]["busy"] == [])
 
     def test_should_refuse_a_new_cue_once_the_curtain_is_closing(self, booth, monkeypatch):
         monkeypatch.setattr(server, "curtain", {"closing": True, "cues": 0})
@@ -719,11 +743,45 @@ class TestTheCurtain:
     def test_should_let_go_of_a_cue_that_failed(self, booth):
         status, _ = booth("POST", "/api/kiln/generate", "not json", {"Content-Type": "application/json"})
         assert status == 400
-        assert server.curtain["cues"] == 0
+        assert settles(lambda: server.curtain["cues"] == 0)
 
     def test_should_take_the_close_only_through_the_stage_door(self, booth):
-        status, _ = cue(booth, "/api/booth/close", {}, origin="http://evil.example")
+        status, _ = cue(booth, "/api/booth/close", this_booth(booth), origin="http://evil.example")
         assert status == 403
-        status, _ = cue(booth, "/api/booth/close", {}, ctype="text/plain")
+        status, _ = cue(booth, "/api/booth/close", this_booth(booth), ctype="text/plain")
         assert status == 415
         assert server.curtain["closing"] is False
+
+    @pytest.mark.parametrize("swap", [
+        lambda named: {},
+        lambda named: {**named, "pid": named["pid"] + 1},  # another process, this bench
+        lambda named: {**named, "bench": "/elsewhere/prompter-box"},  # this process, another bench
+        lambda named: {"pid": named["pid"]},
+        lambda named: "not a dict",
+    ], ids=["nothing named", "another process", "another bench", "no bench", "not a dict"])
+    def test_should_refuse_a_close_meant_for_another_booth(self, booth, swap):
+        """F4: between the launcher's check and its close, the port can change hands."""
+        asked = swap(this_booth(booth))
+        status, body = cue(booth, "/api/booth/close", asked)
+        assert status == 412
+        assert "not the booth that was checked" in body["error"]
+        assert server.curtain["closing"] is False
+        assert booth("GET", "/api/booth")[0] == 200
+
+    def test_should_go_dark_even_when_the_caller_hangs_up_before_the_answer(self, booth, monkeypatch):
+        """F5: a committed close must reach shutdown even if its reply cannot be written."""
+        named = this_booth(booth)
+
+        def hung_up(self, obj, status=200):
+            if status == 202:
+                raise BrokenPipeError("the caller hung up")
+            return original(self, obj, status)
+
+        original = server.BoothWindow.reply
+        monkeypatch.setattr(server.BoothWindow, "reply", hung_up)
+        try:
+            cue(booth, "/api/booth/close", named)
+        except OSError:
+            pass
+        assert server.curtain["closing"] is True
+        assert settles(lambda: not port_answers(booth), within_s=3)

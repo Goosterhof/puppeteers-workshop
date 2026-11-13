@@ -800,19 +800,32 @@ class BoothWindow(BaseHTTPRequestHandler):
     def api_booth_close(self):
         """Put the booth to bed, only if nothing is on stage — decided under the curtain lock.
 
-        Once the curtain says closing, every new cue is refused, so nothing can be admitted between this
-        check and the booth going dark. A refusal names what is on stage. A Face Shop painting already
-        handed to ComfyUI is ComfyUI's and survives the booth.
+        The caller names the booth it checked (`pid` and `bench`, its working directory), and a booth that
+        is not that one refuses: between a check and a close the port can change hands (PR #36, F4). Once
+        the curtain says closing, every new cue is refused, so nothing can be admitted between this check
+        and the booth going dark. A refusal names what is on stage. A Face Shop painting already handed to
+        ComfyUI is ComfyUI's and survives the booth.
         """
+        try:
+            asked = self.body_json()
+        except json.JSONDecodeError:
+            return self.fail("The close request is not valid JSON.")
+        if not isinstance(asked, dict) or asked.get("pid") != os.getpid() or asked.get("bench") != os.getcwd():
+            return self.reply({"closing": False, "busy": [],
+                               "error": "This is not the booth that was checked, so it stays open. "
+                                        "Ask again with ./workshop --stop."}, 412)
         with curtain_lock:
             acts = acts_on_stage()
             if acts:
                 return self.reply({"closing": False, "busy": acts}, 409)
             curtain["closing"] = True
-        self.reply({"closing": True, "busy": []}, 202)
-        print("The booth closes for the night: ./workshop --stop, with nothing on stage.", flush=True)
-        # shutdown() waits for serve_forever to return, so it can't run on this request's own thread.
-        threading.Thread(target=self.server.shutdown, daemon=True).start()
+        # Committed: the booth goes dark even if the caller hangs up before it hears so (F5).
+        try:
+            self.reply({"closing": True, "busy": []}, 202)
+            print("The booth closes for the night: ./workshop --stop, with nothing on stage.", flush=True)
+        finally:
+            # shutdown() waits for serve_forever to return, so it can't run on this request's own thread.
+            threading.Thread(target=self.server.shutdown, daemon=True).start()
 
     def api_status(self):
         llms = loaded_llms()

@@ -32,6 +32,9 @@ import json, os, sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 mode = os.environ.get("STUB_MODE", "house")
+mode_swapped = mode == "swapped"  # answers as the house, but refuses every close as another booth
+if mode_swapped:
+    mode = "house"
 if mode == "crash":
     print("Traceback: an invented import went missing", flush=True)
     sys.exit(1)
@@ -51,6 +54,9 @@ class Window(BaseHTTPRequestHandler):
         self.wfile.write(body)
     def do_POST(self):
         if self.path == "/api/booth/close" and mode == "house":
+            asked = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            if mode_swapped or asked.get("pid") != os.getpid() or asked.get("bench") != os.getcwd():
+                return self.answer(412, {"closing": False, "busy": [], "error": "not the booth that was checked"})
             if busy:
                 return self.answer(409, {"closing": False, "busy": busy})
             self.answer(202, {"closing": True, "busy": []})
@@ -257,6 +263,13 @@ class TestStoppingTheBooth:
         result = bench("--stop")
         assert result.returncode == 0
         assert "already dark" in result.stdout
+
+    def test_should_stop_nothing_when_the_booth_changed_hands_after_the_check(self, bench):
+        bench(STUB_MODE="swapped")
+        result = bench("--stop")
+        assert result.returncode == 1
+        assert "changed between the check and the close" in result.stderr
+        assert port_open(bench.port)
 
     def test_should_never_stop_a_stranger(self, bench, stranger):
         result = bench("--stop")

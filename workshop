@@ -17,7 +17,7 @@
 # runs the booth in the foreground, for a terminal session that wants to watch it.
 set -euo pipefail
 
-bench=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+bench=$(cd "$(dirname "$(readlink -f "$0")")" && pwd -P) # physical, as the booth's own cwd reads
 port=${WORKSHOP_PORT:-7900} # the booth's own PORT; overridden only by the launcher's tests
 state=${XDG_STATE_HOME:-$HOME/.local/state}/puppeteers-workshop
 log=$state/booth.log
@@ -193,7 +193,10 @@ Stop it with Ctrl+C in the terminal that runs it." ;;
   # The booth decides, under the same lock that admits a cue, so nothing can slip in between the check
   # and the close: it either names what is on stage, or stops taking cues and goes dark.
   local reply code
-  reply=$(curl -sS --max-time 5 -X POST -H 'Content-Type: application/json' --data '{}' \
+  # The close names the booth just checked; a booth that has changed hands since refuses it (412).
+  local named
+  named=$(python3 -c 'import json, sys; print(json.dumps({"pid": int(sys.argv[1]), "bench": sys.argv[2]}))' "$pid" "$cwd")
+  reply=$(curl -sS --max-time 5 -X POST -H 'Content-Type: application/json' --data "$named" \
     -w '\n%{http_code}' "http://127.0.0.1:$port/api/booth/close" 2>/dev/null) ||
     refuse "The booth didn't answer the request to close. Try ./workshop --stop again."
   code=${reply##*$'\n'}
@@ -203,6 +206,8 @@ Stop it with Ctrl+C in the terminal that runs it." ;;
     refuse "Not stopping: $(acts_words "$busy") still on stage, and stopping the booth now would lose it.
 Let it settle, or stop it from the console, then run ./workshop --stop again." 2
   fi
+  [ "$code" = 412 ] && refuse "The booth on :$port changed between the check and the close, so nothing was stopped.
+Run ./workshop --stop again."
   [ "$code" = 202 ] || refuse "The booth answered the request to close with $code, so it is still open."
   local waited=0
   while listening && [ "$waited" -lt 100 ]; do
