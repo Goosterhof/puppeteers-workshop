@@ -140,6 +140,38 @@ session, or point any OpenAI-compatible client at `localhost:11434/v1`.
 `./start-prompter.sh` → **http://localhost:7900** — one booth for the whole
 pipeline (stdlib Python, `prompter-box/`, no venv):
 
+**The door in: `./workshop` (2026-11-13).** The everyday way to open the booth,
+modelled on the Dojo Floor's `app/dojo`. Run `./workshop --shortcut` once from
+the bench to put a **Puppeteer's Workshop** icon on the Windows desktop; the icon
+runs `./workshop` through `wsl.exe`.
+
+- `./workshop` starts the booth if it is dark, reuses it if it is lit, and opens
+  it in its own Edge app window. The booth runs detached (`setsid`, log in
+  `~/.local/state/puppeteers-workshop/booth.log`), so closing the window never
+  ends a take: open the icon again and the same booth is there.
+- Before reusing or stopping a listener on :7900 it asks `GET /api/booth` who it
+  is. Anything else on the port is refused by name, never reused or killed. A
+  booth from before `/api/booth` still opens, but can only be stopped with
+  Ctrl+C in its own terminal.
+- Starting the booth starts no model. One thing runs on its own: a Night Shift
+  row that was mid-firing resumes at start, and the launcher says so.
+- `./workshop --status` names what is on stage. `./workshop --stop` asks the
+  booth to close (`POST /api/booth/close`, through the same stage door as any
+  cue) and never kills it. The booth decides under the lock that admits cues:
+  it refuses (409, exit 2) while a Stage, Foley or Kiln take, a Night Shift row,
+  or any cue it is still taking is on stage. That includes a station still
+  clearing the GPU and a Forge strike. Otherwise it stops taking cues (a late
+  one gets a 503) and goes dark. It only stops a booth running from this bench:
+  the close names the process and bench it just checked, and a booth that has
+  changed hands since refuses it (412).
+- Two clicks at once start one booth (a launch lock in the state dir).
+
+`./start-prompter.sh` stays for a terminal session that wants the booth in the
+foreground. Native receipts (2026-11-13): the shortcut's fields read back from a
+real `.lnk`; a stand-in booth started through `wsl.exe` outlived it (a
+`wslhost.exe` keeps it), and `--status`/`--stop` reached it from another shell.
+Not yet witnessed: the real booth from the icon, and the Edge window.
+
 **The Proscenium (2026-07-21, experiment log #00063):** the booth front is a
 Vue 3 + UnoCSS + Vite app in `prompter-box/front/`. `npm run build` (bench
 Node v24 — a development-time tool only) emits the bundle into

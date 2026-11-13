@@ -92,6 +92,7 @@ MM_OUT = MM_DIR / "output" / "prompter"
 FF_SHARED = BASE / "ffmpeg-shared" / "lib"  # torchcodec's substrate — see the runbook
 
 PORT = 7900
+BOOTH_NAME = "the-prompters-box"  # what /api/booth answers, so the launcher knows the house
 HOUSE_HOST = "127.0.0.1"  # the booth is a house instrument, not a broadcast
 
 # The stage door. Two checks, both about the browser tab nobody opened on
@@ -264,7 +265,25 @@ foley_job = {"state": "idle"}  # idle | running | done | failed
 
 kiln_lock = threading.Lock()
 kiln_job = {"state": "idle"}   # idle | running | done | failed
+
+# The curtain: every cue the booth is taking counts while its handler runs, so a station that is still
+# clearing the GPU (it holds its lock for up to 90 s before its ledger says "running") and a Forge strike
+# that answers in the same request are both on stage. Closing the booth is decided under the same lock
+# as admitting a cue, so a cue can never be accepted and then lost to a close (PR #36, the Heretic's finding).
+curtain_lock = threading.Lock()
+curtain = {"closing": False, "cues": 0}
 shift_log = {"name": None}     # the Night Shift's current log reel
+
+
+def acts_on_stage():
+    """What the booth is doing right now, for /api/booth and the close. Caller holds curtain_lock."""
+    acts = [name for name, job in (("stage", stage_job), ("foley", foley_job), ("kiln", kiln_job))
+            if job.get("state") == "running"]
+    if night_shift.shift_status()["running"]:
+        acts.append("night_shift")
+    if curtain["cues"]:
+        acts.append("cue")
+    return acts
 
 
 def stations_clear():
@@ -688,6 +707,8 @@ class BoothWindow(BaseHTTPRequestHandler):
             return self.api_shelf_list()
         if path == "/api/status":
             return self.api_status()
+        if path == "/api/booth":
+            return self.api_booth()
         if path == "/api/kiln/job":
             return self.api_kiln_job()
         if path == "/api/rack/list":
@@ -719,6 +740,20 @@ class BoothWindow(BaseHTTPRequestHandler):
     def do_POST(self):
         if (refusal := self.door_refusal(posting=True)):
             return self.fail(*refusal)
+        if self.path == "/api/booth/close":
+            return self.api_booth_close()
+        with curtain_lock:
+            if curtain["closing"]:
+                return self.fail("The booth is closing for the night, so it took no new cue. Open it "
+                                 "again with ./workshop, then cue again.", 503)
+            curtain["cues"] += 1
+        try:
+            return self.take_cue()
+        finally:
+            with curtain_lock:
+                curtain["cues"] -= 1
+
+    def take_cue(self):
         try:
             payload = self.body_json()
         except json.JSONDecodeError:
@@ -750,6 +785,48 @@ class BoothWindow(BaseHTTPRequestHandler):
         route(payload)
 
     # -- api -----------------------------------------------------------
+    def api_booth(self):
+        """Who answers at this port, and whether anything is on stage.
+
+        The `workshop` launcher asks this before it reuses a listener or stops
+        one, so it must be cheap and must never reach for a machine: it reads
+        the booth's own job ledgers only. A Face Shop painting is ComfyUI's job
+        and outlives the booth, so it is not counted here.
+        """
+        with curtain_lock:
+            acts = acts_on_stage()
+        self.reply({"booth": BOOTH_NAME, "pid": os.getpid(), "busy": acts})
+
+    def api_booth_close(self):
+        """Put the booth to bed, only if nothing is on stage — decided under the curtain lock.
+
+        The caller names the booth it checked (`pid` and `bench`, its working directory), and a booth that
+        is not that one refuses: between a check and a close the port can change hands (PR #36, F4). Once
+        the curtain says closing, every new cue is refused, so nothing can be admitted between this check
+        and the booth going dark. A refusal names what is on stage. A Face Shop painting already handed to
+        ComfyUI is ComfyUI's and survives the booth.
+        """
+        try:
+            asked = self.body_json()
+        except json.JSONDecodeError:
+            return self.fail("The close request is not valid JSON.")
+        if not isinstance(asked, dict) or asked.get("pid") != os.getpid() or asked.get("bench") != os.getcwd():
+            return self.reply({"closing": False, "busy": [],
+                               "error": "This is not the booth that was checked, so it stays open. "
+                                        "Ask again with ./workshop --stop."}, 412)
+        with curtain_lock:
+            acts = acts_on_stage()
+            if acts:
+                return self.reply({"closing": False, "busy": acts}, 409)
+            curtain["closing"] = True
+        # Committed: the booth goes dark even if the caller hangs up before it hears so (F5).
+        try:
+            self.reply({"closing": True, "busy": []}, 202)
+            print("The booth closes for the night: ./workshop --stop, with nothing on stage.", flush=True)
+        finally:
+            # shutdown() waits for serve_forever to return, so it can't run on this request's own thread.
+            threading.Thread(target=self.server.shutdown, daemon=True).start()
+
     def api_status(self):
         llms = loaded_llms()
         comfy = None
