@@ -612,3 +612,41 @@ class TestFaceJobRecovery:
         _, uploaded = cue(booth, '/api/footage/upload', {'name': 'brought.png', 'data': TestBringYourOwnStill.b64(TestBringYourOwnStill.PNG)})
         for name in (cast['cast'], uploaded['shelved']):
             assert stat.S_IMODE((booth.rooms['footage'] / name).stat().st_mode) == 0o644
+
+
+class TestTheBoothsNameplate:
+    """`/api/booth` — what the `workshop` launcher asks before it reuses a
+    listener on :7900 or stops one. Cheap, local, and never a machine probe."""
+
+    def test_should_name_the_house_and_its_process_with_nothing_on_stage(self, booth):
+        status, body = booth("GET", "/api/booth")
+        assert status == 200
+        assert body["booth"] == "the-prompters-box"
+        assert body["pid"] == server.os.getpid()
+        assert body["busy"] == []
+
+    @pytest.mark.parametrize("ledger,act", [("stage_job", "stage"), ("foley_job", "foley"),
+                                            ("kiln_job", "kiln")])
+    def test_should_name_each_act_still_running(self, booth, monkeypatch, ledger, act):
+        monkeypatch.setattr(server, ledger, {"state": "running"})
+        assert booth("GET", "/api/booth")[1]["busy"] == [act]
+
+    def test_should_count_a_night_shift_working_a_row(self, booth, monkeypatch):
+        monkeypatch.setattr(server.night_shift, "shift_status",
+                            lambda: {"running": True, "row_id": "row-1",
+                                     "subject": "a cart", "started": None})
+        assert booth("GET", "/api/booth")[1]["busy"] == ["night_shift"]
+
+    def test_should_never_count_a_take_that_has_settled(self, booth, monkeypatch):
+        monkeypatch.setattr(server, "stage_job", {"state": "done"})
+        monkeypatch.setattr(server, "kiln_job", {"state": "failed"})
+        assert booth("GET", "/api/booth")[1]["busy"] == []
+
+    def test_should_never_reach_for_a_machine_to_answer(self, booth, monkeypatch):
+        def no_machines(*_args, **_kwargs):
+            raise AssertionError("the nameplate reached for a machine")
+
+        monkeypatch.setattr(server, "http_json", no_machines)
+        monkeypatch.setattr(server, "gpu_vram_gb", no_machines)
+        monkeypatch.setattr(server, "loaded_llms", no_machines)
+        assert booth("GET", "/api/booth")[0] == 200

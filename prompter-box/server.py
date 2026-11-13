@@ -92,6 +92,7 @@ MM_OUT = MM_DIR / "output" / "prompter"
 FF_SHARED = BASE / "ffmpeg-shared" / "lib"  # torchcodec's substrate — see the runbook
 
 PORT = 7900
+BOOTH_NAME = "the-prompters-box"  # what /api/booth answers, so the launcher knows the house
 HOUSE_HOST = "127.0.0.1"  # the booth is a house instrument, not a broadcast
 
 # The stage door. Two checks, both about the browser tab nobody opened on
@@ -688,6 +689,8 @@ class BoothWindow(BaseHTTPRequestHandler):
             return self.api_shelf_list()
         if path == "/api/status":
             return self.api_status()
+        if path == "/api/booth":
+            return self.api_booth()
         if path == "/api/kiln/job":
             return self.api_kiln_job()
         if path == "/api/rack/list":
@@ -750,6 +753,21 @@ class BoothWindow(BaseHTTPRequestHandler):
         route(payload)
 
     # -- api -----------------------------------------------------------
+    def api_booth(self):
+        """Who answers at this port, and whether anything is on stage.
+
+        The `workshop` launcher asks this before it reuses a listener or stops
+        one, so it must be cheap and must never reach for a machine: it reads
+        the booth's own job ledgers only. A Face Shop painting is ComfyUI's job
+        and outlives the booth, so it is not counted here.
+        """
+        acts = [name for name, job in (("stage", stage_job), ("foley", foley_job),
+                                       ("kiln", kiln_job))
+                if job.get("state") == "running"]
+        if night_shift.shift_status()["running"]:
+            acts.append("night_shift")
+        self.reply({"booth": BOOTH_NAME, "pid": os.getpid(), "busy": acts})
+
     def api_status(self):
         llms = loaded_llms()
         comfy = None

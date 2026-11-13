@@ -1,0 +1,225 @@
+#!/usr/bin/env bash
+# The Puppeteer's Workshop — one door in.
+#
+#   ./workshop             open the booth: start it if it is dark, reuse it if it is lit, then a window on it
+#   ./workshop --status    say who holds the booth's port and what is on stage
+#   ./workshop --stop      put the booth to bed, but never mid-take
+#   ./workshop --shortcut  put a "Puppeteer's Workshop" icon on the Windows desktop that runs ./workshop
+#
+# The booth is the Prompter's Box (prompter-box/server.py, loopback :7900). It is started detached, so closing
+# the window never ends a take: open the shortcut again and the same booth is still there. Before reusing or
+# stopping whatever listens on the port, the launcher asks /api/booth who it is, so a stranger on :7900 is never
+# mistaken for the house. Starting the booth starts no model: the stations load theirs under the GPU guard when
+# a cue asks. One thing does run on its own: a Night Shift row that was mid-firing when the booth went dark
+# picks up again at start, and the launcher says so.
+#
+# It must run from the bench (~/code/video-lab), where the machines are installed. start-prompter.sh still
+# runs the booth in the foreground, for a terminal session that wants to watch it.
+set -euo pipefail
+
+bench=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+port=${WORKSHOP_PORT:-7900} # the booth's own PORT; overridden only by the launcher's tests
+state=${XDG_STATE_HOME:-$HOME/.local/state}/puppeteers-workshop
+log=$state/booth.log
+python=$bench/ComfyUI/.venv/bin/python
+house=the-prompters-box
+start_wait=${WORKSHOP_START_WAIT:-60}
+url="http://localhost:$port/"
+
+say() { printf '%s\n' "$*"; }
+refuse() {
+  printf '%s\n' "$1" >&2
+  exit "${2:-1}"
+}
+
+listening() { (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; }
+
+# Who answers at the port: "house <pid> <busy acts or ->", "older" for a booth from before /api/booth,
+# "stranger" for anything else, or "dark" when nothing listens.
+who_answers() {
+  listening || {
+    echo dark
+    return
+  }
+  local reply
+  if reply=$(curl -fsS --max-time 3 "http://127.0.0.1:$port/api/booth" 2>/dev/null); then
+    printf '%s' "$reply" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except ValueError:
+    print("stranger"); sys.exit()
+if d.get("booth") == sys.argv[1] and isinstance(d.get("pid"), int):
+    print("house", d["pid"], ",".join(d.get("busy") or []) or "-")
+else:
+    print("stranger")' "$house"
+    return
+  fi
+  # A booth older than the nameplate still answers /api/status with its station ledger.
+  if curl -fsS --max-time 5 "http://127.0.0.1:$port/api/status" 2>/dev/null |
+    python3 -c 'import json, sys; d = json.load(sys.stdin); sys.exit(0 if {"forge", "kiln", "night_shift"} <= set(d) else 1)' 2>/dev/null; then
+    echo older
+  else
+    echo stranger
+  fi
+}
+
+stranger_words() {
+  say "Something that isn't the Prompter's Box is holding port $port, so the booth can't open there."
+  say "See what it is with: ss -ltnp 'sport = :$port'. Close it, then run ./workshop again."
+}
+
+acts_words() { printf '%s' "$1" | sed 's/night_shift/the Night Shift/; s/,/, /g'; }
+
+start_booth() {
+  [ -f "$bench/prompter-box/server.py" ] || refuse "There is no prompter-box/server.py beside this launcher ($bench). Run it from the bench."
+  [ -x "$python" ] || refuse "The ComfyUI machine isn't on this floor: $python is missing.
+The booth runs on that venv, so ./workshop has to run from the bench (~/code/video-lab), where the machines are
+installed. A blueprint checkout has the instruments only."
+  command -v setsid >/dev/null || refuse "setsid is missing, so the booth can't be started apart from this window."
+  printf '\n--- %s ./workshop opens the booth\n' "$(date -Is)" >>"$log"
+  # setsid: the booth, and any take under it, must outlive this shell and the shortcut's console.
+  # 9>&-: the booth must not inherit the launch lock, or it would hold it for as long as it runs.
+  (cd "$bench/prompter-box" && exec setsid nohup "$python" server.py >>"$log" 2>&1 </dev/null 9>&-) &
+  local started=$! waited=0
+  while [ "$waited" -lt $((start_wait * 10)) ]; do
+    case $(who_answers) in
+    house* | older) return 0 ;;
+    stranger)
+      stranger_words >&2
+      exit 1
+      ;;
+    esac
+    if ! kill -0 "$started" 2>/dev/null; then
+      say "The booth stopped while it was starting. The last lines of $log:" >&2
+      tail -n 15 "$log" >&2
+      exit 1
+    fi
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  refuse "The booth still isn't answering after ${start_wait} s. It may still be loading; see $log."
+}
+
+open_window() {
+  local edge="/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
+  if [ -n "${WORKSHOP_NO_WINDOW:-}" ] || [ ! -x "$edge" ]; then
+    say "The booth is open at $url"
+    return
+  fi
+  cd /mnt/c
+  # From the shortcut, wsl.exe ends with this script and would take a child Edge with it, so Windows starts Edge.
+  WORKSHOP_EDGE=$(wslpath -w "$edge") WORKSHOP_URL=$url WSLENV=WORKSHOP_EDGE:WORKSHOP_URL \
+    /mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -NonInteractive -Command \
+    'Start-Process $env:WORKSHOP_EDGE "--app=$env:WORKSHOP_URL"' >/dev/null
+  say "The booth is open at $url, in its own window."
+}
+
+open_booth() {
+  mkdir -p "$state"
+  # Two clicks on the shortcut must not start two booths.
+  exec 9>"$state/launch.lock"
+  flock -w $((start_wait + 5)) 9 || refuse "Another ./workshop is still opening the booth. Give it a moment."
+  local answer
+  answer=$(who_answers)
+  case $answer in
+  dark)
+    start_booth
+    answer=$(who_answers)
+    ;;
+  stranger)
+    stranger_words >&2
+    exit 1
+    ;;
+  older)
+    say "The booth on :$port is older than this launcher. It opens, but ./workshop can't see what it has on stage."
+    ;;
+  esac
+  flock -u 9
+  if [ "${answer%% *}" = house ]; then
+    local busy=${answer##* }
+    case ",$busy," in *,night_shift,*)
+      say "A Night Shift row is firing: it was mid-row when the booth went dark, and it has picked up where it stopped."
+      ;;
+    esac
+  fi
+  open_window
+}
+
+status() {
+  local answer
+  answer=$(who_answers)
+  case $answer in
+  dark) say "The booth is dark: nothing listens on :$port." ;;
+  stranger) stranger_words ;;
+  older) say "An older booth is open at $url. It predates /api/booth, so what it has on stage is unknown here." ;;
+  house*)
+    set -- $answer
+    if [ "$3" = - ]; then
+      say "The booth is open at $url (process $2), with nothing on stage."
+    else
+      say "The booth is open at $url (process $2). On stage: $(acts_words "$3")."
+    fi
+    ;;
+  esac
+}
+
+stop_booth() {
+  local answer
+  answer=$(who_answers)
+  case $answer in
+  dark)
+    say "The booth is already dark."
+    return 0
+    ;;
+  stranger)
+    stranger_words >&2
+    exit 1
+    ;;
+  older) refuse "The booth on :$port is older than this launcher, so it can't say what it has on stage.
+Stop it with Ctrl+C in the terminal that runs it." ;;
+  esac
+  set -- $answer
+  local pid=$2 busy=$3
+  [ "$busy" = - ] || refuse "Not stopping: $(acts_words "$busy") still on stage, and stopping the booth now would lose it.
+Let it settle, or stop it from the console, then run ./workshop --stop again." 2
+  local cwd
+  cwd=$(readlink "/proc/$pid/cwd" 2>/dev/null) || refuse "The booth says it is process $pid, which this shell can't see. Stop it where it was started."
+  [ "$cwd" = "$bench/prompter-box" ] || refuse "The booth on :$port runs from $cwd, not from this bench. Stop it from there."
+  kill -TERM "$pid"
+  local waited=0
+  while listening && [ "$waited" -lt 100 ]; do
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  listening && refuse "The booth (process $pid) was asked to stop, but :$port is still open after 10 s."
+  say "The booth is dark. Nothing was on stage."
+}
+
+shortcut() {
+  local name="Puppeteer's Workshop"
+  # The icon runs this very file, so it has to be the bench's copy, where the machines are.
+  [ -x "$python" ] || refuse "This checkout has no ComfyUI machine ($python is missing), so an icon pointing here could
+never open the booth. Run ./workshop --shortcut from the bench (~/code/video-lab)."
+  WORKSHOP_TARGET="-d ${WSL_DISTRO_NAME:?./workshop --shortcut has to run inside WSL} -- bash -ic \"$bench/workshop\"" \
+    WORKSHOP_LINK_NAME=$name WORKSHOP_LINK_NOTE="Opens the Prompter's Box, starting it if it is dark" \
+    WSLENV=WORKSHOP_TARGET:WORKSHOP_LINK_NAME:WORKSHOP_LINK_NOTE:WORKSHOP_SHORTCUT_DIR \
+    /mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -NonInteractive -Command '
+      $dir = if ($env:WORKSHOP_SHORTCUT_DIR) { $env:WORKSHOP_SHORTCUT_DIR } else { [Environment]::GetFolderPath("Desktop") }
+      $s = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $dir ($env:WORKSHOP_LINK_NAME + ".lnk")))
+      $s.TargetPath = "C:\Windows\System32\wsl.exe"
+      $s.Arguments = $env:WORKSHOP_TARGET
+      $s.Description = $env:WORKSHOP_LINK_NOTE
+      $s.WindowStyle = 7
+      $s.Save()
+      Write-Output $s.FullName'
+}
+
+case ${1:-} in
+"") open_booth ;;
+--status) status ;;
+--stop) stop_booth ;;
+--shortcut) shortcut ;;
+-h | --help) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//' ;;
+*) refuse "./workshop doesn't know '$1'. Try ./workshop --help." 64 ;;
+esac
