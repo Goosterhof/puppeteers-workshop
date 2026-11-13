@@ -120,11 +120,12 @@ open_booth() {
   # Two clicks on the shortcut must not start two booths.
   exec 9>"$state/launch.lock"
   flock -w $((start_wait + 5)) 9 || refuse "Another ./workshop is still opening the booth. Give it a moment."
-  local answer
+  local answer started=
   answer=$(who_answers)
   case $answer in
   dark)
     start_booth
+    started=yes
     answer=$(who_answers)
     ;;
   stranger)
@@ -139,7 +140,12 @@ open_booth() {
   if [ "${answer%% *}" = house ]; then
     local busy=${answer##* }
     case ",$busy," in *,night_shift,*)
-      say "A Night Shift row is firing: it was mid-row when the booth went dark, and it has picked up where it stopped."
+      # Only a booth this launch started can have resumed a row; a lit booth's shift is simply working.
+      if [ -n "$started" ]; then
+        say "A Night Shift row is firing: it was mid-row when the booth went dark, and it has picked up where it stopped."
+      else
+        say "The Night Shift is working a row. The Callboard shows which."
+      fi
       ;;
     esac
   fi

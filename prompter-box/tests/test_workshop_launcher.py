@@ -204,10 +204,17 @@ class TestOpeningTheBooth:
         assert "The booth stopped while it was starting" in result.stderr
         assert "an invented import went missing" in result.stderr
 
-    def test_should_say_a_night_shift_row_picked_up_again(self, bench):
+    def test_should_say_a_night_shift_row_picked_up_again_when_it_started_the_booth(self, bench):
         result = bench(STUB_BUSY="night_shift")
         assert result.returncode == 0
-        assert "Night Shift row is firing" in result.stdout
+        assert "picked up where it stopped" in result.stdout
+
+    def test_should_only_say_a_shift_is_working_when_it_reused_a_lit_booth(self, bench):
+        assert bench(STUB_BUSY="night_shift").returncode == 0
+        result = bench(STUB_BUSY="night_shift")
+        assert result.returncode == 0
+        assert "The Night Shift is working a row" in result.stdout
+        assert "picked up" not in result.stdout
 
 
 class TestTheStatus:
