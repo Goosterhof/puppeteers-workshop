@@ -7,6 +7,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -206,6 +207,18 @@ def fired_solid(tmp_path, monkeypatch, kiln_sandbox, software_render, solid_glb)
 
 
 class TestKilnFire:
+    @pytest.mark.parametrize("refiring", [False, True])
+    def test_should_refuse_unknown_memory_before_the_next_mesh_stage(
+            self, tmp_path, monkeypatch, kiln_sandbox, solid_glb, refiring):
+        monkeypatch.setattr(kiln, "paint_subject", fake_paint(tmp_path))
+        mesh = Mock(return_value=solid_glb)
+        monkeypatch.setattr(kiln, "fire_mesh", mesh)
+        monkeypatch.setattr(kiln, "detect_shredding", lambda *a, **k: True)
+        guard = Mock(side_effect=([(True, 99.0)] if refiring else []) + [(False, None)])
+        with pytest.raises(kiln.KilnColdError, match="nvidia-smi.*try again"):
+            kiln.kiln_fire("an invented clay pot", seed=7, clear_set=guard)
+        assert mesh.call_count == (1 if refiring else 0)
+
     def test_should_return_the_full_output_contract_from_a_fixture_firing(self, fired_solid):
         """Criterion 1 — kiln_fire's output contract, fixture-driven."""
         r = fired_solid["result"]
@@ -606,3 +619,15 @@ class TestDespillMagentaGate:
         alpha[...] = 0
         out = kiln.despill_magenta_gate(rgb, alpha)
         assert tuple(out[10, 10]) == (120, 60, 120)
+
+
+def test_should_leave_the_original_pending_when_a_rack_refire_cannot_read_memory(
+        fired_solid, monkeypatch):
+    cid = fired_solid["result"].id
+    before = kiln.read_recipe(cid)
+    mesh = Mock(side_effect=AssertionError("an unknown meter must not fire a mesh"))
+    monkeypatch.setattr(kiln, "fire_mesh", mesh)
+    with pytest.raises(kiln.KilnColdError, match="nvidia-smi.*try again"):
+        kiln.rack_refire(cid, 224, 0.4, clear_set=lambda need: (False, None))
+    mesh.assert_not_called()
+    assert kiln.read_recipe(cid) == before

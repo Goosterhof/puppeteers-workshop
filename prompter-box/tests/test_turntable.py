@@ -196,3 +196,17 @@ class TestWriteQA:
         assert filed["passed"] is True
         assert set(filed["checks"]) == {
             "silhouette_continuity", "voxel_hole_ratio", "floating_islands"}
+
+
+def test_should_skip_only_vision_when_its_memory_reading_is_unknown(
+        monkeypatch, software_render, solid_glb):
+    from unittest.mock import Mock
+    vision = Mock(side_effect=AssertionError("an unknown meter must not load vision"))
+    monkeypatch.setattr(turntable, "vision_ground", vision)
+    qa = turntable_qa(solid_glb, expected_parts=1, subject_phrase="an invented clay pot",
+                      clear_set=lambda need: (False, None))
+    vision.assert_not_called()
+    assert qa.passed is True  # deterministic mesh QA remains independent of vision
+    assert "nvidia-smi" in qa.vision["error"]
+    assert "try again" in qa.vision["error"]
+    assert qa.canister_label is None
