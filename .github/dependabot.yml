@@ -19,6 +19,10 @@ updates:
               applies-to: security-updates
               patterns:
                   - '*'
+      # vue-tsc 3.3 can't load TypeScript 7; lift this once vue-tsc supports it.
+      ignore:
+          - dependency-name: typescript
+            versions: ['>=7']
       open-pull-requests-limit: 10
       labels:
           - dependencies
