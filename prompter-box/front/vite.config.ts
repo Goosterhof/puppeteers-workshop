@@ -23,8 +23,8 @@ export default defineConfig({
     build: {
         outDir: '../static',
         emptyOutDir: true,
-        // the lazy Potter's Wheel chunk carries three.js (~580 KB) — the same
-        // weight the vendored era accepted; anything heavier should be seen
+        // the lazy Potter's Wheel chunk carries three.js (~640 KB); anything
+        // heavier should be seen
         chunkSizeWarningLimit: 700,
     },
     server: {

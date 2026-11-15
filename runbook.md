@@ -184,9 +184,8 @@ typecheck && npx vitest run && npm run check:dist` — the drift guard rebuilds
 and fails the moment the committed bundle is stale against the source. Never
 edit `static/` by hand; it is build output (`vite build` empties it). Verify
 UI changes on the :7901 sideport (`verify-sideport.py`), never the investor's
-:7900 booth. three.js rides as an npm dep (pinned 0.177, the old vendored
-version) in a lazy chunk; the Potter's Wheel module lives at
-`front/src/lib/potters-wheel.ts`.
+:7900 booth. three.js rides as an npm dep (pinned 0.187) in a lazy chunk;
+the Potter's Wheel module lives at `front/src/lib/potters-wheel.ts`.
 The front is **TypeScript** (2026-07-22, investor's cue — supersedes
 #00063 §1A's "plain JS by design", which was a port-parity choice for the
 cutover): strict `vue-tsc` (Mezzanine-grade tsconfig, `noUncheckedIndexedAccess`
